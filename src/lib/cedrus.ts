@@ -24,23 +24,43 @@ export interface CedrusBuscarResponse {
 
 /**
  * Chama a Edge Function cedrus-buscar com os filtros informados.
- * Lança erro se a função retornar status != 2xx.
+ * Injeta explicitamente o JWT do usuário logado — sem sessão, falha cedo.
  */
 export async function buscarNoCedrus(
   params: CedrusBuscarParams
 ): Promise<CedrusBuscarResponse> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("Sessão expirou. Faça login novamente.");
+  }
+
   const { data, error } = await supabase.functions.invoke<CedrusBuscarResponse>(
     "cedrus-buscar",
-    { body: params }
+    {
+      body: params,
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    }
   );
 
   if (error) {
-    // supabase-js encapsula detalhes; tenta extrair mensagem amigável
-    const msg =
-      error instanceof Error && error.message
-        ? error.message
-        : "Falha ao consultar Cedrus";
-    throw new Error(msg);
+    // Tenta extrair o corpo da resposta de erro (FunctionsHttpError inclui context)
+    const ctx = (error as { context?: Response }).context;
+    if (ctx && typeof ctx.json === "function") {
+      try {
+        const body = await ctx.json();
+        if (body?.error) throw new Error(body.error);
+      } catch {
+        /* ignora, cai no throw padrão */
+      }
+    }
+    throw new Error(
+      error instanceof Error ? error.message : "Falha ao consultar Cedrus"
+    );
   }
 
   if (!data) throw new Error("Resposta vazia da Edge Function");
