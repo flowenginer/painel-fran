@@ -94,6 +94,35 @@ export interface Config {
   updated_at: string;
 }
 
+// Devedor normalizado retornado pela Edge Function cedrus-buscar
+// (ver supabase/functions/cedrus-buscar/transform.ts).
+// Representa um devedor pré-processado pronto para a tela de revisão.
+export interface DevedorNormalizado {
+  id_devedor: string | null;
+  cod_credor: string | null;
+  cod_devedor: string | null;
+  cpf: string | null;
+  nome_devedor: string;
+  email: string | null;
+  telefone: string;
+  telefone_2: string | null;
+  telefone_3: string | null;
+  endereco: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  estado: string | null;
+  cep: string | null;
+  nome_aluno: string;
+  valor_original: number | null;
+  valor_atualizado: number | null;
+  qtd_parcelas_aberto: number | null;
+  ano_inicial_dividas: number | null;
+  ano_final_dividas: number | null;
+  acordo_anterior: "sim" | "nao";
+  categoria: string | null;
+  dado_adicional: string | null;
+}
+
 // Disparo (tabela fran_disparos - nova)
 export interface Disparo {
   id: number;

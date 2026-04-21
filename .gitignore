@@ -38,3 +38,8 @@ lerna-debug.log*
 
 # Misc
 .eslintcache
+
+# Supabase CLI (local dev)
+supabase/.branches
+supabase/.temp
+supabase/.env
