@@ -2,30 +2,40 @@ import { Routes, Route, Navigate } from "react-router-dom";
 
 import { Login } from "@/pages/Login";
 import { Dashboard } from "@/pages/Dashboard";
+import { Instituicoes } from "@/pages/Instituicoes";
+import { Configuracoes } from "@/pages/Configuracoes";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { Toaster } from "@/components/ui/toaster";
 
 function App() {
   return (
-    <Routes>
-      {/* Rota pública */}
-      <Route path="/login" element={<Login />} />
+    <>
+      <Routes>
+        {/* Rota pública */}
+        <Route path="/login" element={<Login />} />
 
-      {/* Rotas protegidas */}
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
+        {/* Rotas protegidas com layout compartilhado */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <AppLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/instituicoes" element={<Instituicoes />} />
+          <Route path="/configuracoes" element={<Configuracoes />} />
+        </Route>
 
-      {/* Rota raiz redireciona pro dashboard (que por sua vez manda pro login se não autenticado) */}
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        {/* Rota raiz redireciona pro dashboard */}
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-      {/* 404: redireciona pra raiz */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        {/* 404: redireciona pra raiz */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+      <Toaster />
+    </>
   );
 }
 
