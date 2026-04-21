@@ -136,7 +136,10 @@ Deno.serve(async (req: Request) => {
     // Valida autenticação do usuário — o painel só chama autenticado.
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return jsonResponse({ error: "Não autenticado" }, 401);
+      return jsonResponse(
+        { error: "Header Authorization ausente" },
+        401
+      );
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -156,7 +159,17 @@ Deno.serve(async (req: Request) => {
     });
     const { data: userData, error: userErr } = await userClient.auth.getUser();
     if (userErr || !userData?.user) {
-      return jsonResponse({ error: "Sessão inválida" }, 401);
+      console.error("getUser falhou:", userErr?.message, {
+        authHeaderPrefix: authHeader.slice(0, 20),
+      });
+      return jsonResponse(
+        {
+          error:
+            "Sessão inválida ou expirada. Faça logout e login novamente.",
+          detail: userErr?.message,
+        },
+        401
+      );
     }
 
     // Parse e valida body

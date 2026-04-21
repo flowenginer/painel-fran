@@ -19,14 +19,37 @@ export interface DispararLoteResponse {
 export async function dispararLote(
   params: DispararLoteParams
 ): Promise<DispararLoteResponse> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error("Sessão expirou. Faça login novamente.");
+  }
+
   const { data, error } = await supabase.functions.invoke<DispararLoteResponse>(
     "disparar-lote",
-    { body: params }
+    {
+      body: params,
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    }
   );
 
   if (error) {
-    const msg = error instanceof Error ? error.message : "Falha ao disparar";
-    throw new Error(msg);
+    const ctx = (error as { context?: Response }).context;
+    if (ctx && typeof ctx.json === "function") {
+      try {
+        const body = await ctx.json();
+        if (body?.error) throw new Error(body.error);
+      } catch {
+        /* ignora */
+      }
+    }
+    throw new Error(
+      error instanceof Error ? error.message : "Falha ao disparar"
+    );
   }
   if (!data) throw new Error("Resposta vazia");
   return data;
