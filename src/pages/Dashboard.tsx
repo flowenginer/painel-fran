@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Plus, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import {
 import { DevedoresTable } from "@/components/dashboard/DevedoresTable";
 import { FiltrosBar } from "@/components/dashboard/FiltrosBar";
 import { KpiCards } from "@/components/dashboard/KpiCards";
+import { AdicionarDevedorDialog } from "@/components/adicionar-devedor/AdicionarDevedorDialog";
 import { useDevedoresFilters } from "@/hooks/useDevedoresFilters";
 import { useDevedoresRealtime } from "@/hooks/useDevedoresRealtime";
 
@@ -18,6 +20,7 @@ export function Dashboard() {
   const { state, setFilters, setPage, setSort, clear, hasFiltersAtivos } =
     useDevedoresFilters();
   const flashIds = useDevedoresRealtime();
+  const [adicionarOpen, setAdicionarOpen] = useState(false);
 
   return (
     <div className="space-y-6">
@@ -29,7 +32,11 @@ export function Dashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" disabled>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAdicionarOpen(true)}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Adicionar Devedor
           </Button>
@@ -39,6 +46,11 @@ export function Dashboard() {
           </Button>
         </div>
       </div>
+
+      <AdicionarDevedorDialog
+        open={adicionarOpen}
+        onOpenChange={setAdicionarOpen}
+      />
 
       <KpiCards />
 
