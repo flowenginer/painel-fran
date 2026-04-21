@@ -12,14 +12,17 @@ supabase/
 ├── functions/
 │   ├── _shared/
 │   │   └── cors.ts                      # helpers CORS
-│   └── cedrus-buscar/
-│       ├── index.ts                     # entry point da Edge Function
-│       ├── cedrus-client.ts             # GET autenticado (Basic Auth) com timeout
-│       ├── telefones.ts                 # normalização + priorização de celular
-│       ├── valores.ts                   # parse BR ("1.500,00" → 1500.00)
-│       ├── alunos.ts                    # extração de nomes + acordo anterior
-│       ├── transform.ts                 # devedor bruto → DevedorNormalizado
-│       └── deno.json                    # config do Deno
+│   ├── cedrus-buscar/
+│   │   ├── index.ts                     # entry point da Edge Function
+│   │   ├── cedrus-client.ts             # GET autenticado (Basic Auth) com timeout
+│   │   ├── telefones.ts                 # normalização + priorização de celular
+│   │   ├── valores.ts                   # parse BR ("1.500,00" → 1500.00)
+│   │   ├── alunos.ts                    # extração de nomes + acordo anterior
+│   │   ├── transform.ts                 # devedor bruto → DevedorNormalizado
+│   │   └── deno.json                    # config do Deno
+│   └── disparar-lote/
+│       ├── index.ts                     # valida limites + POST ao webhook n8n
+│       └── deno.json
 └── README.md                            # este arquivo
 ```
 
@@ -127,6 +130,58 @@ Pelo menos um entre `id_devedor`, `cod_credor`, `cod_devedor` ou
 - `500` — API key não configurada ou erro interno
 - `502` — falha de rede com Cedrus
 - `504` — timeout (60s)
+
+## Deploy da Edge Function `disparar-lote`
+
+Mesma sequência do `cedrus-buscar`:
+
+```bash
+supabase functions deploy disparar-lote
+```
+
+### Contrato
+
+**Request** (POST JSON, requer JWT do operador):
+```json
+{
+  "devedor_ids": [123, 456, 789],
+  "campanha": "cobranca_abr_2026"
+}
+```
+
+**Response 200**:
+```json
+{
+  "ok": true,
+  "enviados": 3,
+  "erros": 0,
+  "inelegiveis": [],
+  "limite_diario": 40,
+  "limite_restante": 37,
+  "webhook_error": null
+}
+```
+
+**Response 400** (validação falhou antes de chamar n8n):
+- Limite diário atingido ou ultrapassado pela seleção
+- Fora do horário (fran_config.horario_disparo_inicio/fim em SP)
+- URL do webhook n8n não configurada
+- Nenhum devedor elegível (status ≠ pendente, sem telefone, etc.)
+
+**Pré-requisitos** em `fran_config`:
+- `n8n_webhook_url` — obrigatório
+- `limite_diario_disparos` — default 40
+- `horario_disparo_inicio` — default "08:00"
+- `horario_disparo_fim` — default "20:00"
+
+**Efeitos colaterais** quando o webhook responde 2xx:
+- INSERT em `fran_disparos` (1 linha por devedor, `status_envio='enviado'`)
+- UPDATE em `fran_devedores`: `status_negociacao='primeira_msg'`,
+  `data_primeiro_disparo=NOW()`, `data_ultimo_contato=NOW()`
+
+Em caso de erro do webhook:
+- INSERT em `fran_disparos` com `status_envio='erro'` e `erro_detalhes`
+- NÃO altera o status do devedor (permite reprocessar)
 
 ## Schema do banco (referência)
 

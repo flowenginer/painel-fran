@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { ChevronLeft, ChevronRight, Inbox, MoreHorizontal } from "lucide-react";
 
 import {
@@ -9,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   formatBRL,
@@ -31,6 +33,10 @@ interface DevedoresTableProps {
   onSortChange: (field: SortField, direction: SortDirection) => void;
   hasFiltersAtivos: boolean;
   flashIds?: Set<number>;
+  // Suporte à seleção de pendentes para disparo (TASK-017).
+  selecionados: Set<number>;
+  onToggleSelecionado: (id: number) => void;
+  onTogglePaginaAtual: (ids: number[]) => void;
 }
 
 export function DevedoresTable({
@@ -39,6 +45,9 @@ export function DevedoresTable({
   onSortChange,
   hasFiltersAtivos,
   flashIds,
+  selecionados,
+  onToggleSelecionado,
+  onTogglePaginaAtual,
 }: DevedoresTableProps) {
   const { page, filters, sortField, sortDirection } = state;
   const { data, isLoading, isError, error } = useDevedores({
@@ -65,12 +74,35 @@ export function DevedoresTable({
         sub: "Use \"Adicionar Devedor\" para importar do Cedrus ou cadastrar manualmente.",
       };
 
+  // IDs elegíveis na página atual (status=pendente)
+  const idsElegiveisPagina = useMemo(
+    () =>
+      devedores
+        .filter((d) => d.status_negociacao === "pendente")
+        .map((d) => d.id),
+    [devedores]
+  );
+  const temElegiveisPagina = idsElegiveisPagina.length > 0;
+  const todosDaPaginaSelecionados =
+    temElegiveisPagina &&
+    idsElegiveisPagina.every((id) => selecionados.has(id));
+
   return (
     <div className="space-y-3">
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/30 hover:bg-muted/30">
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={todosDaPaginaSelecionados}
+                  onCheckedChange={() =>
+                    onTogglePaginaAtual(idsElegiveisPagina)
+                  }
+                  disabled={!temElegiveisPagina}
+                  aria-label="Selecionar pendentes da página"
+                />
+              </TableHead>
               <SortableHead
                 field="nome_devedor"
                 currentField={sortField}
@@ -115,7 +147,7 @@ export function DevedoresTable({
             {isError && (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={8}
                   className="h-32 text-center text-sm text-destructive"
                 >
                   Erro ao carregar devedores:{" "}
@@ -126,7 +158,7 @@ export function DevedoresTable({
 
             {!isLoading && !isError && devedores.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="h-48">
+                <TableCell colSpan={8} className="h-48">
                   <div className="flex flex-col items-center justify-center gap-2 py-6 text-muted-foreground">
                     <Inbox className="h-8 w-8" />
                     <p className="text-sm font-medium">{emptyMsg.title}</p>
@@ -138,46 +170,59 @@ export function DevedoresTable({
 
             {!isLoading &&
               !isError &&
-              devedores.map((d) => (
-                <TableRow
-                  key={d.id}
-                  className={
-                    flashIds?.has(d.id) ? "animate-highlight-flash" : undefined
-                  }
-                >
-                  <TableCell className="font-medium">
-                    {d.nome_devedor || "—"}
-                  </TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    {formatCpfMascarado(d.cpf)}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {d.instituicao || (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-sm">
-                    {formatBRL(d.valor_atualizado)}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={d.status_negociacao} />
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {formatTempoRelativo(d.data_ultimo_contato)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      disabled
-                      aria-label="Ações"
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              devedores.map((d) => {
+                const elegivel = d.status_negociacao === "pendente";
+                return (
+                  <TableRow
+                    key={d.id}
+                    className={
+                      flashIds?.has(d.id)
+                        ? "animate-highlight-flash"
+                        : undefined
+                    }
+                  >
+                    <TableCell>
+                      <Checkbox
+                        checked={selecionados.has(d.id)}
+                        onCheckedChange={() => onToggleSelecionado(d.id)}
+                        disabled={!elegivel}
+                        aria-label={`Selecionar ${d.nome_devedor}`}
+                      />
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {d.nome_devedor || "—"}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {formatCpfMascarado(d.cpf)}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {d.instituicao || (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {formatBRL(d.valor_atualizado)}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={d.status_negociacao} />
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {formatTempoRelativo(d.data_ultimo_contato)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        disabled
+                        aria-label="Ações"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
           </TableBody>
         </Table>
       </div>
@@ -223,6 +268,9 @@ function SkeletonRows() {
     <>
       {Array.from({ length: 5 }).map((_, i) => (
         <TableRow key={i}>
+          <TableCell>
+            <Skeleton className="h-4 w-4" />
+          </TableCell>
           <TableCell>
             <Skeleton className="h-4 w-40" />
           </TableCell>
