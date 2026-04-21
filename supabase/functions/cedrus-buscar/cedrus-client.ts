@@ -52,7 +52,9 @@ function limparFiltros(
 
 /**
  * Busca devedores na API Cedrus.
- * O endpoint é GET mas aceita body JSON (fora do padrão, mas funciona).
+ * Filtros via query string no GET (o Deno fetch bloqueia body em GET).
+ * Se a API do Cedrus rejeitar query string, fazemos fallback para POST
+ * com body JSON.
  */
 export async function buscarDevedoresCedrus(
   urlBase: string,
@@ -60,23 +62,47 @@ export async function buscarDevedoresCedrus(
   filters: CedrusFilters
 ): Promise<CedrusResponse> {
   const endpoint = `${urlBase.replace(/\/+$/, "")}/devedor`;
-  const body = JSON.stringify(limparFiltros(filters));
+  const limpos = limparFiltros(filters);
+
+  // Monta query string
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(limpos)) qs.set(k, String(v));
+  const urlComQS = qs.size > 0 ? `${endpoint}?${qs.toString()}` : endpoint;
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
 
   let resp: Response;
   try {
-    resp = await fetch(endpoint, {
+    // Tentativa 1: GET com query string
+    resp = await fetch(urlComQS, {
       method: "GET",
       headers: {
-        "Authorization": basicAuth(apikey),
-        "Content-Type": "application/json",
-        "Accept": "application/json",
+        Authorization: basicAuth(apikey),
+        Accept: "application/json",
       },
-      body,
       signal: ctrl.signal,
     });
+
+    // Se a API explicitamente rejeitar (ex: 405), tenta POST com body
+    if (resp.status === 405 || resp.status === 400) {
+      const textoErro = await resp.clone().text();
+      // Só faz fallback se a mensagem sugerir que os filtros não foram
+      // recebidos (evita fallback em 400 legítimo de validação)
+      if (/method|filtros?\s+obrig|sem\s+filtro/i.test(textoErro)) {
+        console.log("[cedrus-client] fallback para POST com body");
+        resp = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            Authorization: basicAuth(apikey),
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(limpos),
+          signal: ctrl.signal,
+        });
+      }
+    }
   } catch (err) {
     clearTimeout(timer);
     if (err instanceof Error && err.name === "AbortError") {
