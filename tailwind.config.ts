@@ -62,7 +62,8 @@ export default {
           to: { height: "0" },
         },
         "highlight-flash": {
-          "0%": { backgroundColor: "hsl(var(--primary) / 0.2)" },
+          "0%": { backgroundColor: "rgb(250 204 21 / 0.25)" },
+          "60%": { backgroundColor: "rgb(250 204 21 / 0.25)" },
           "100%": { backgroundColor: "transparent" },
         },
       },

@@ -30,6 +30,7 @@ interface DevedoresTableProps {
   onPageChange: (page: number) => void;
   onSortChange: (field: SortField, direction: SortDirection) => void;
   hasFiltersAtivos: boolean;
+  flashIds?: Set<number>;
 }
 
 export function DevedoresTable({
@@ -37,6 +38,7 @@ export function DevedoresTable({
   onPageChange,
   onSortChange,
   hasFiltersAtivos,
+  flashIds,
 }: DevedoresTableProps) {
   const { page, filters, sortField, sortDirection } = state;
   const { data, isLoading, isError, error } = useDevedores({
@@ -137,7 +139,12 @@ export function DevedoresTable({
             {!isLoading &&
               !isError &&
               devedores.map((d) => (
-                <TableRow key={d.id}>
+                <TableRow
+                  key={d.id}
+                  className={
+                    flashIds?.has(d.id) ? "animate-highlight-flash" : undefined
+                  }
+                >
                   <TableCell className="font-medium">
                     {d.nome_devedor || "—"}
                   </TableCell>

@@ -10,19 +10,14 @@ import {
 } from "@/components/ui/card";
 import { DevedoresTable } from "@/components/dashboard/DevedoresTable";
 import { FiltrosBar } from "@/components/dashboard/FiltrosBar";
+import { KpiCards } from "@/components/dashboard/KpiCards";
 import { useDevedoresFilters } from "@/hooks/useDevedoresFilters";
-
-const kpis = [
-  { label: "Total devedores", value: "—" },
-  { label: "Em negociação", value: "—" },
-  { label: "Acordos (mês)", value: "—" },
-  { label: "Escalados", value: "—" },
-  { label: "Disparos hoje", value: "0 / 40" },
-];
+import { useDevedoresRealtime } from "@/hooks/useDevedoresRealtime";
 
 export function Dashboard() {
   const { state, setFilters, setPage, setSort, clear, hasFiltersAtivos } =
     useDevedoresFilters();
+  const flashIds = useDevedoresRealtime();
 
   return (
     <div className="space-y-6">
@@ -45,24 +40,14 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* KPIs — valores reais entram na TASK-010 */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {kpis.map((kpi) => (
-          <Card key={kpi.label}>
-            <CardHeader className="pb-2">
-              <CardDescription className="text-xs">{kpi.label}</CardDescription>
-              <CardTitle className="text-2xl">{kpi.value}</CardTitle>
-            </CardHeader>
-          </Card>
-        ))}
-      </div>
+      <KpiCards />
 
       <Card>
         <CardHeader>
           <CardTitle>Devedores</CardTitle>
           <CardDescription>
-            Filtros, busca e ordenação salvos na URL (compartilháveis).
-            Realtime na TASK-011.
+            Filtros e ordenação salvos na URL. Atualizações da Fran aparecem
+            em tempo real.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -77,6 +62,7 @@ export function Dashboard() {
             onPageChange={setPage}
             onSortChange={setSort}
             hasFiltersAtivos={hasFiltersAtivos}
+            flashIds={flashIds}
           />
         </CardContent>
       </Card>
