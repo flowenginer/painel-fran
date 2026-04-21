@@ -1,3 +1,6 @@
+import { Plus, Send } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -5,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { DevedoresTable } from "@/components/dashboard/DevedoresTable";
 
 const kpis = [
   { label: "Total devedores", value: "—" },
@@ -17,11 +21,23 @@ const kpis = [
 export function Dashboard() {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          Visão geral da operação. Lista de devedores, filtros e disparos.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Visão geral da operação. Lista de devedores, filtros e disparos.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" disabled>
+            <Plus className="mr-2 h-4 w-4" />
+            Adicionar Devedor
+          </Button>
+          <Button size="sm" disabled>
+            <Send className="mr-2 h-4 w-4" />
+            Disparar Campanha
+          </Button>
+        </div>
       </div>
 
       {/* KPIs — valores reais entram na TASK-010 */}
@@ -38,16 +54,13 @@ export function Dashboard() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Lista de devedores</CardTitle>
+          <CardTitle>Devedores</CardTitle>
           <CardDescription>
-            A tabela, filtros, busca e realtime serão implementados nas
-            tasks 008–011.
+            Filtros, busca e Realtime serão implementados nas tasks 009 e 011.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex h-48 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
-            Placeholder da lista de devedores
-          </div>
+          <DevedoresTable />
         </CardContent>
       </Card>
     </div>
