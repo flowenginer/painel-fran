@@ -75,7 +75,7 @@ Acompanhamento das tasks pelo GitHub Issues com labels de fase (`fase-1-infra`, 
 
 - ✅ TASK-001 a 004: Infraestrutura do banco (tabelas, RLS, Realtime)
 - ✅ TASK-005: Projeto inicial (este commit)
-- ⏳ TASK-006: Login
+- ✅ TASK-006: Login
 - ⏳ TASK-007: Layout base
 - ...
 
