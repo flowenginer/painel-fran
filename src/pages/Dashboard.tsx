@@ -9,6 +9,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DevedoresTable } from "@/components/dashboard/DevedoresTable";
+import { FiltrosBar } from "@/components/dashboard/FiltrosBar";
+import { useDevedoresFilters } from "@/hooks/useDevedoresFilters";
 
 const kpis = [
   { label: "Total devedores", value: "—" },
@@ -19,6 +21,9 @@ const kpis = [
 ];
 
 export function Dashboard() {
+  const { state, setFilters, setPage, setSort, clear, hasFiltersAtivos } =
+    useDevedoresFilters();
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -56,11 +61,23 @@ export function Dashboard() {
         <CardHeader>
           <CardTitle>Devedores</CardTitle>
           <CardDescription>
-            Filtros, busca e Realtime serão implementados nas tasks 009 e 011.
+            Filtros, busca e ordenação salvos na URL (compartilháveis).
+            Realtime na TASK-011.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <DevedoresTable />
+        <CardContent className="space-y-4">
+          <FiltrosBar
+            filters={state.filters}
+            onChange={setFilters}
+            onClear={clear}
+            hasFiltersAtivos={hasFiltersAtivos}
+          />
+          <DevedoresTable
+            state={state}
+            onPageChange={setPage}
+            onSortChange={setSort}
+            hasFiltersAtivos={hasFiltersAtivos}
+          />
         </CardContent>
       </Card>
     </div>

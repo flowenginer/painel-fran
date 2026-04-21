@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { ChevronLeft, ChevronRight, MoreHorizontal, Inbox } from "lucide-react";
+import { ChevronLeft, ChevronRight, Inbox, MoreHorizontal } from "lucide-react";
 
 import {
   Table,
@@ -16,12 +15,36 @@ import {
   formatCpfMascarado,
   formatTempoRelativo,
 } from "@/lib/formatters";
-import { useDevedores, PAGE_SIZE } from "@/hooks/useDevedores";
+import {
+  useDevedores,
+  PAGE_SIZE,
+  type SortDirection,
+  type SortField,
+} from "@/hooks/useDevedores";
+import type { DevedoresTableState } from "@/hooks/useDevedoresFilters";
 import { StatusBadge } from "./StatusBadge";
+import { SortableHead } from "./SortableHead";
 
-export function DevedoresTable() {
-  const [page, setPage] = useState(1);
-  const { data, isLoading, isError, error } = useDevedores({ page });
+interface DevedoresTableProps {
+  state: DevedoresTableState;
+  onPageChange: (page: number) => void;
+  onSortChange: (field: SortField, direction: SortDirection) => void;
+  hasFiltersAtivos: boolean;
+}
+
+export function DevedoresTable({
+  state,
+  onPageChange,
+  onSortChange,
+  hasFiltersAtivos,
+}: DevedoresTableProps) {
+  const { page, filters, sortField, sortDirection } = state;
+  const { data, isLoading, isError, error } = useDevedores({
+    page,
+    filters,
+    sortField,
+    sortDirection,
+  });
 
   const devedores = data?.devedores ?? [];
   const total = data?.total ?? 0;
@@ -30,18 +53,57 @@ export function DevedoresTable() {
   const inicio = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const fim = Math.min(page * PAGE_SIZE, total);
 
+  const emptyMsg = hasFiltersAtivos
+    ? {
+        title: "Nenhum devedor encontrado",
+        sub: "Ajuste os filtros ou limpe a busca para ver mais resultados.",
+      }
+    : {
+        title: "Nenhum devedor cadastrado",
+        sub: "Use \"Adicionar Devedor\" para importar do Cedrus ou cadastrar manualmente.",
+      };
+
   return (
     <div className="space-y-3">
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/30 hover:bg-muted/30">
-              <TableHead>Nome</TableHead>
+              <SortableHead
+                field="nome_devedor"
+                currentField={sortField}
+                direction={sortDirection}
+                onSort={onSortChange}
+              >
+                Nome
+              </SortableHead>
               <TableHead>CPF</TableHead>
               <TableHead>Instituição</TableHead>
-              <TableHead className="text-right">Valor atualizado</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Último contato</TableHead>
+              <SortableHead
+                field="valor_atualizado"
+                currentField={sortField}
+                direction={sortDirection}
+                onSort={onSortChange}
+                align="right"
+              >
+                Valor atualizado
+              </SortableHead>
+              <SortableHead
+                field="status_negociacao"
+                currentField={sortField}
+                direction={sortDirection}
+                onSort={onSortChange}
+              >
+                Status
+              </SortableHead>
+              <SortableHead
+                field="data_ultimo_contato"
+                currentField={sortField}
+                direction={sortDirection}
+                onSort={onSortChange}
+              >
+                Último contato
+              </SortableHead>
               <TableHead className="w-12 text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
@@ -65,13 +127,8 @@ export function DevedoresTable() {
                 <TableCell colSpan={7} className="h-48">
                   <div className="flex flex-col items-center justify-center gap-2 py-6 text-muted-foreground">
                     <Inbox className="h-8 w-8" />
-                    <p className="text-sm font-medium">
-                      Nenhum devedor cadastrado
-                    </p>
-                    <p className="text-xs">
-                      Use "Adicionar Devedor" para importar do Cedrus ou
-                      cadastrar manualmente.
-                    </p>
+                    <p className="text-sm font-medium">{emptyMsg.title}</p>
+                    <p className="text-xs">{emptyMsg.sub}</p>
                   </div>
                 </TableCell>
               </TableRow>
@@ -118,7 +175,6 @@ export function DevedoresTable() {
         </Table>
       </div>
 
-      {/* Paginação */}
       <div className="flex items-center justify-between gap-4 text-sm text-muted-foreground">
         <p>
           {isLoading
@@ -131,7 +187,7 @@ export function DevedoresTable() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            onClick={() => onPageChange(Math.max(1, page - 1))}
             disabled={isLoading || page <= 1}
           >
             <ChevronLeft className="h-4 w-4" />
@@ -143,7 +199,7 @@ export function DevedoresTable() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            onClick={() => onPageChange(Math.min(totalPages, page + 1))}
             disabled={isLoading || page >= totalPages}
           >
             <span className="hidden sm:inline mr-1">Próxima</span>
