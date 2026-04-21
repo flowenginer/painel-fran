@@ -1,29 +1,11 @@
 // Edge Function: cedrus-buscar
 //
-// Proxy autenticado para a API do Cedrus. Recebe filtros do frontend,
-// busca as credenciais em fran_config, faz GET com Basic Auth, normaliza
-// os devedores e retorna array pré-processado + metadata de paginação.
-//
-// Requisição:
-//   POST /functions/v1/cedrus-buscar
-//   Authorization: Bearer <user JWT>
-//   Content-Type: application/json
-//   Body: { id_devedor?, cod_credor?, cnpj_cpf?, status?, dt_vencimento_de?,
-//           dt_vencimento_ate?, num_pagina? }
-//
-// Resposta (200):
-//   {
-//     devedores: DevedorNormalizado[],
-//     pagina: number,
-//     tamanhoPagina: number,
-//     possuiProximaPagina: boolean,
-//     total: number,
-//     message?: string
-//   }
-
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.46.1";
+// Proxy autenticado para a API do Cedrus. Recebe filtros, busca as
+// credenciais em fran_config, faz GET com Basic Auth, normaliza os
+// devedores e retorna array pré-processado + metadata de paginação.
 
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
+import { lerConfig, lerEnv, validarJwt } from "../_shared/supabase-rest.ts";
 import {
   buscarDevedoresCedrus,
   CedrusError,
@@ -74,7 +56,6 @@ function validarBody(body: unknown): RequestBody {
     result.num_pagina = Math.floor(n);
   }
 
-  // Precisa pelo menos de um filtro de busca
   if (
     !result.id_devedor &&
     !result.cod_credor &&
@@ -89,96 +70,62 @@ function validarBody(body: unknown): RequestBody {
   return result;
 }
 
-async function lerConfigCedrus(
-  supabaseUrl: string,
-  serviceKey: string
-): Promise<{ apikey: string; urlBase: string }> {
-  const admin = createClient(supabaseUrl, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
-  const { data, error } = await admin
-    .from("fran_config")
-    .select("chave, valor")
-    .in("chave", ["cedrus_apikey", "cedrus_url_base"]);
-
-  if (error) throw new Error(`Falha ao ler fran_config: ${error.message}`);
-
-  const mapa: Record<string, string> = {};
-  for (const row of data ?? []) {
-    mapa[row.chave as string] = (row.valor as string | null) ?? "";
-  }
-
-  const apikey = mapa.cedrus_apikey?.trim();
-  const urlBase =
-    mapa.cedrus_url_base?.trim() ||
-    "https://api.sistemadecobranca.com.br:3001/v1";
-
-  if (!apikey) {
-    throw new Error(
-      "API Key do Cedrus não configurada. Defina fran_config.cedrus_apikey em Configurações."
-    );
-  }
-
-  return { apikey, urlBase };
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
-
   if (req.method !== "POST") {
     return jsonResponse({ error: "Método não permitido" }, 405);
   }
 
   try {
-    // Valida autenticação do usuário — o painel só chama autenticado.
+    // Etapa 1: validar env
+    console.log("[cedrus-buscar] start");
+    const env = lerEnv();
+
+    // Etapa 2: validar JWT
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return jsonResponse(
-        { error: "Header Authorization ausente" },
-        401
-      );
+      return jsonResponse({ error: "Header Authorization ausente" }, 401);
     }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-    if (!supabaseUrl || !serviceKey || !anonKey) {
-      return jsonResponse(
-        { error: "Variáveis de ambiente do Supabase ausentes" },
-        500
-      );
-    }
-
-    // Verifica sessão válida
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data: userData, error: userErr } = await userClient.auth.getUser();
-    if (userErr || !userData?.user) {
-      console.error("getUser falhou:", userErr?.message, {
-        authHeaderPrefix: authHeader.slice(0, 20),
-      });
+    try {
+      await validarJwt(env, authHeader);
+    } catch (err) {
+      console.error("[cedrus-buscar] JWT inválido:", err);
       return jsonResponse(
         {
           error:
             "Sessão inválida ou expirada. Faça logout e login novamente.",
-          detail: userErr?.message,
+          detail: err instanceof Error ? err.message : String(err),
         },
         401
       );
     }
 
-    // Parse e valida body
+    // Etapa 3: validar body
     const body = await req.json().catch(() => null);
     const filtros = validarBody(body);
 
-    // Lê config do Cedrus (service role pra ignorar RLS)
-    const { apikey, urlBase } = await lerConfigCedrus(supabaseUrl, serviceKey);
+    // Etapa 4: ler config Cedrus
+    const cfg = await lerConfig(env, [
+      "cedrus_apikey",
+      "cedrus_url_base",
+    ]);
+    const apikey = cfg.cedrus_apikey?.trim();
+    const urlBase =
+      cfg.cedrus_url_base?.trim() ||
+      "https://api.sistemadecobranca.com.br:3001/v1";
+    if (!apikey) {
+      return jsonResponse(
+        {
+          error:
+            "API Key do Cedrus não configurada. Defina em Configurações.",
+        },
+        400
+      );
+    }
 
+    // Etapa 5: chamar Cedrus
     const pagina = filtros.num_pagina ?? 1;
     const cedrusFilters: CedrusFilters = {
       id_devedor: filtros.id_devedor,
@@ -191,11 +138,18 @@ Deno.serve(async (req: Request) => {
       num_pagina: pagina,
     };
 
+    console.log("[cedrus-buscar] chamando cedrus", {
+      urlBase,
+      filtros: Object.keys(cedrusFilters),
+    });
     const resp = await buscarDevedoresCedrus(urlBase, apikey, cedrusFilters);
+    console.log("[cedrus-buscar] cedrus retornou", {
+      count: resp.devedores.length,
+      message: resp.rawMessage,
+    });
 
+    // Etapa 6: normalizar
     const normalizados = resp.devedores.map(transformarDevedor);
-
-    // Sinal de paginação: se veio exatamente 50, pode existir próxima página.
     const possuiProximaPagina =
       resp.devedores.length >= TAMANHO_PAGINA_CEDRUS;
 
@@ -208,6 +162,8 @@ Deno.serve(async (req: Request) => {
       message: resp.rawMessage,
     });
   } catch (err) {
+    console.error("[cedrus-buscar] exceção não tratada:", err);
+
     if (err instanceof CedrusError) {
       return jsonResponse(
         { error: err.message, detail: err.detail },
@@ -215,9 +171,11 @@ Deno.serve(async (req: Request) => {
       );
     }
     const message = err instanceof Error ? err.message : String(err);
-    // Erros de validação do body → 400
     const isValidation =
       /Informe ao menos|status deve ser|num_pagina|Body deve ser/.test(message);
-    return jsonResponse({ error: message }, isValidation ? 400 : 500);
+    return jsonResponse(
+      { error: message, stack: err instanceof Error ? err.stack : undefined },
+      isValidation ? 400 : 500
+    );
   }
 });

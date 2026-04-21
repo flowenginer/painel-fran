@@ -1,23 +1,15 @@
 // Edge Function: disparar-lote
 //
-// Dispara a primeira mensagem em lote para um conjunto de devedores
-// via webhook n8n. Aplica validações antes:
-// - Usuário autenticado
-// - Limite diário (fran_config.limite_diario_disparos, default 40)
-// - Horário permitido (fran_config.horario_disparo_inicio/fim)
-// - Cada devedor precisa estar com status='pendente' e ter telefone
-//
-// Após sucesso do webhook:
-// - INSERT em fran_disparos (um por devedor)
-// - UPDATE em fran_devedores: status='primeira_msg',
-//   data_primeiro_disparo=NOW(), tentativas_contato += 1
-//
-// Em caso de erro do webhook: registra em fran_disparos com
-// status_envio='erro' e NÃO altera o status do devedor.
-
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.46.1";
+// Dispara a primeira mensagem em lote via webhook n8n com validações
+// de limite diário, horário e elegibilidade dos devedores.
 
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
+import {
+  lerConfig,
+  lerEnv,
+  rest,
+  validarJwt,
+} from "../_shared/supabase-rest.ts";
 
 const TZ = "America/Sao_Paulo";
 
@@ -60,12 +52,10 @@ function validarBody(raw: unknown): RequestBody {
     }
     parsed.push(Math.floor(n));
   }
-
   const campanha =
     typeof b.campanha === "string" && b.campanha.trim().length > 0
       ? b.campanha.trim()
       : undefined;
-
   return { devedor_ids: parsed, campanha };
 }
 
@@ -76,9 +66,8 @@ function inicioHojeSaoPauloUTC(): string {
     month: "2-digit",
     day: "2-digit",
   });
-  const hoje = fmt.format(new Date()); // yyyy-mm-dd
-  const data = new Date(`${hoje}T00:00:00-03:00`);
-  return data.toISOString();
+  const hoje = fmt.format(new Date());
+  return new Date(`${hoje}T00:00:00-03:00`).toISOString();
 }
 
 function dentroDoHorario(inicio: string, fim: string): boolean {
@@ -95,10 +84,7 @@ function dentroDoHorario(inicio: string, fim: string): boolean {
 
   const [iH, iM] = (inicio ?? "08:00").split(":").map(Number);
   const [fH, fM] = (fim ?? "20:00").split(":").map(Number);
-  const ini = iH * 60 + iM;
-  const f = fH * 60 + fM;
-
-  return atual >= ini && atual <= f;
+  return atual >= iH * 60 + iM && atual <= fH * 60 + fM;
 }
 
 function montarPayloadDevedor(d: DevedorRow) {
@@ -128,80 +114,47 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    console.log("[disparar-lote] start");
+    const env = lerEnv();
+
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return jsonResponse(
-        { error: "Header Authorization ausente" },
-        401
-      );
+      return jsonResponse({ error: "Header Authorization ausente" }, 401);
     }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-    if (!supabaseUrl || !serviceKey || !anonKey) {
-      return jsonResponse(
-        { error: "Variáveis de ambiente do Supabase ausentes" },
-        500
-      );
-    }
-
-    // Verifica sessão do operador
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data: userData, error: userErr } = await userClient.auth.getUser();
-    if (userErr || !userData?.user) {
-      console.error("getUser falhou:", userErr?.message);
+    let usuarioId: string;
+    try {
+      const user = await validarJwt(env, authHeader);
+      usuarioId = user.id;
+    } catch (err) {
+      console.error("[disparar-lote] JWT inválido:", err);
       return jsonResponse(
         {
           error:
             "Sessão inválida ou expirada. Faça logout e login novamente.",
-          detail: userErr?.message,
+          detail: err instanceof Error ? err.message : String(err),
         },
         401
       );
     }
-    const usuarioId = userData.user.id;
 
-    // Parse body
     const body = await req.json().catch(() => null);
     const { devedor_ids, campanha } = validarBody(body);
 
-    // Service role client pra escrever ignorando RLS nas operações críticas
-    const admin = createClient(supabaseUrl, serviceKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-
     // 1. Lê configs
-    const { data: configRows, error: cfgErr } = await admin
-      .from("fran_config")
-      .select("chave, valor")
-      .in("chave", [
-        "limite_diario_disparos",
-        "horario_disparo_inicio",
-        "horario_disparo_fim",
-        "n8n_webhook_url",
-      ]);
-    if (cfgErr) throw cfgErr;
-
-    const cfg: Record<string, string> = {};
-    for (const r of configRows ?? []) {
-      cfg[r.chave as string] = (r.valor as string | null) ?? "";
-    }
+    const cfg = await lerConfig(env, [
+      "limite_diario_disparos",
+      "horario_disparo_inicio",
+      "horario_disparo_fim",
+      "n8n_webhook_url",
+    ]);
 
     const limiteDiario = Number(cfg.limite_diario_disparos) || 40;
     const horaInicio = cfg.horario_disparo_inicio?.trim() || "08:00";
     const horaFim = cfg.horario_disparo_fim?.trim() || "20:00";
     const webhookUrl = cfg.n8n_webhook_url?.trim();
-
     if (!webhookUrl) {
       return jsonResponse(
-        {
-          error:
-            "URL do webhook n8n não configurada. Defina em Configurações.",
-        },
+        { error: "URL do webhook n8n não configurada." },
         400
       );
     }
@@ -217,19 +170,28 @@ Deno.serve(async (req: Request) => {
     }
 
     // 3. Valida limite diário
-    const { count: jaEnviados, error: countErr } = await admin
-      .from("fran_disparos")
-      .select("*", { count: "exact", head: true })
-      .eq("status_envio", "enviado")
-      .gte("data_disparo", inicioHojeSaoPauloUTC());
-    if (countErr) throw countErr;
+    const inicioHoje = inicioHojeSaoPauloUTC();
+    const countResp = await rest(
+      env,
+      "GET",
+      `/fran_disparos?status_envio=eq.enviado&data_disparo=gte.${encodeURIComponent(
+        inicioHoje
+      )}&select=id`,
+      undefined,
+      { Prefer: "count=exact" }
+    );
+    if (!countResp.ok) {
+      throw new Error(
+        `Falha ao contar disparos: ${countResp.status} ${await countResp.text()}`
+      );
+    }
+    const contentRange = countResp.headers.get("content-range") ?? "0-0/0";
+    const jaEnviados = Number(contentRange.split("/")[1]) || 0;
 
-    const disponivel = limiteDiario - (jaEnviados ?? 0);
+    const disponivel = limiteDiario - jaEnviados;
     if (disponivel <= 0) {
       return jsonResponse(
-        {
-          error: `Limite diário atingido (${jaEnviados}/${limiteDiario}).`,
-        },
+        { error: `Limite diário atingido (${jaEnviados}/${limiteDiario}).` },
         400
       );
     }
@@ -242,16 +204,21 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 4. Busca devedores e valida elegibilidade (status=pendente, telefone)
-    const { data: devedores, error: devErr } = await admin
-      .from("fran_devedores")
-      .select(
-        "id, cpf, nome_devedor, primeiro_nome, tratamento, telefone, instituicao, nome_aluno, valor_atualizado, ano_inicial_dividas, ano_final_dividas, qtd_parcelas_aberto, acordo_anterior, status_negociacao"
-      )
-      .in("id", devedor_ids);
-    if (devErr) throw devErr;
+    // 4. Busca devedores e valida elegibilidade
+    const ids = devedor_ids.join(",");
+    const devResp = await rest(
+      env,
+      "GET",
+      `/fran_devedores?id=in.(${ids})&select=id,cpf,nome_devedor,primeiro_nome,tratamento,telefone,instituicao,nome_aluno,valor_atualizado,ano_inicial_dividas,ano_final_dividas,qtd_parcelas_aberto,acordo_anterior,status_negociacao`
+    );
+    if (!devResp.ok) {
+      throw new Error(
+        `Falha ao buscar devedores: ${devResp.status} ${await devResp.text()}`
+      );
+    }
+    const devedores = (await devResp.json()) as DevedorRow[];
+    const mapa = new Map(devedores.map((d) => [d.id, d]));
 
-    const mapa = new Map((devedores ?? []).map((d) => [d.id, d as DevedorRow]));
     const elegiveis: DevedorRow[] = [];
     const inelegiveis: { id: number; motivo: string }[] = [];
 
@@ -277,10 +244,7 @@ Deno.serve(async (req: Request) => {
 
     if (elegiveis.length === 0) {
       return jsonResponse(
-        {
-          error: "Nenhum devedor elegível para disparo",
-          inelegiveis,
-        },
+        { error: "Nenhum devedor elegível para disparo", inelegiveis },
         400
       );
     }
@@ -312,11 +276,8 @@ Deno.serve(async (req: Request) => {
       } catch {
         webhookResp = texto;
       }
-      if (resp.ok) {
-        webhookOk = true;
-      } else {
-        webhookErr = `HTTP ${resp.status}`;
-      }
+      if (resp.ok) webhookOk = true;
+      else webhookErr = `HTTP ${resp.status}`;
     } catch (err) {
       clearTimeout(timer);
       webhookErr =
@@ -327,7 +288,7 @@ Deno.serve(async (req: Request) => {
             : String(err);
     }
 
-    // 6. Registra em fran_disparos (sucesso ou erro)
+    // 6. Registra em fran_disparos
     const agora = new Date().toISOString();
     const linhasDisparo = elegiveis.map((d) => ({
       devedor_id: d.id,
@@ -340,30 +301,42 @@ Deno.serve(async (req: Request) => {
       usuario_id: usuarioId,
     }));
 
-    const { error: insertErr } = await admin
-      .from("fran_disparos")
-      .insert(linhasDisparo);
-    if (insertErr) {
-      // Log mas não interrompe — importante sinalizar pro caller
-      console.error("Erro ao inserir fran_disparos:", insertErr);
+    const insResp = await rest(
+      env,
+      "POST",
+      "/fran_disparos",
+      linhasDisparo,
+      { Prefer: "return=minimal" }
+    );
+    if (!insResp.ok) {
+      console.error(
+        "Erro ao inserir fran_disparos:",
+        insResp.status,
+        await insResp.text()
+      );
     }
 
-    // 7. Se sucesso: atualiza status dos devedores
+    // 7. Atualiza status se sucesso
     if (webhookOk) {
-      const ids = elegiveis.map((d) => d.id);
-      // Chamada em duas etapas porque Supabase não suporta tentativas_contato + 1
-      // dentro de .update() em batch. Fazemos UPDATE normal dos campos fixos
-      // e um RPC-like seria overkill aqui — a imprecisão de +1 é aceitável
-      // (Fran atualiza depois com tool calls).
-      const { error: updErr } = await admin
-        .from("fran_devedores")
-        .update({
+      const idsList = elegiveis.map((d) => d.id).join(",");
+      const updResp = await rest(
+        env,
+        "PATCH",
+        `/fran_devedores?id=in.(${idsList})`,
+        {
           status_negociacao: "primeira_msg",
           data_primeiro_disparo: agora,
           data_ultimo_contato: agora,
-        })
-        .in("id", ids);
-      if (updErr) console.error("Erro ao atualizar devedores:", updErr);
+        },
+        { Prefer: "return=minimal" }
+      );
+      if (!updResp.ok) {
+        console.error(
+          "Erro ao atualizar devedores:",
+          updResp.status,
+          await updResp.text()
+        );
+      }
     }
 
     return jsonResponse({
@@ -379,11 +352,15 @@ Deno.serve(async (req: Request) => {
       webhook_error: webhookErr,
     });
   } catch (err) {
+    console.error("[disparar-lote] exceção não tratada:", err);
     const message = err instanceof Error ? err.message : String(err);
     const isValidation =
       /devedor_ids|Body deve ser|Fora do hor|Limite di|Selecionou/.test(
         message
       );
-    return jsonResponse({ error: message }, isValidation ? 400 : 500);
+    return jsonResponse(
+      { error: message, stack: err instanceof Error ? err.stack : undefined },
+      isValidation ? 400 : 500
+    );
   }
 });
