@@ -1,38 +1,82 @@
 // Extração de nomes de alunos do campo complemento_3 dos títulos Cedrus.
-// Regras da seção 7.2 do PRD.
+// Regras da seção 7.2 do PRD, refinadas após auditoria do JSON real
+// de produção (credor 2168 — Escola M.L.).
 //
-// - Remove prefixos genéricos (MENSALIDADE, CHEQUES, PARCELAS DE ACORDO).
-// - Remove itens que parecem genéricos (puramente números ou vazios).
-// - Normaliza capitalização (Title Case) e retorna únicos com "; " de separador.
+// Padrões observados no campo complemento_3:
+//   - Nomes reais: "MENSALIDADE ABRAAO", "MENSALIDADE CALEBE RAMOS"
+//   - Tipos de título (sem nome): "ACORDO", "MENS", "MENS_PRAVC",
+//     "MENS_EXTRA", "CHEQUE 3", "EDUCAÇÃO"
+//
+// A heurística descarta o segundo grupo.
 
-const PREFIXOS_GENERICOS = [
+// Remove só quando o prefixo aparece SEGUIDO de uma palavra (que seria
+// o nome). "MENSALIDADE JOAO" → "JOAO". "MENS" sozinho → "" (descartado).
+const PREFIXOS_NOMEADOS = [
   "MENSALIDADE",
   "MENSALIDADES",
   "CHEQUE",
   "CHEQUES",
   "PARCELAS DE ACORDO",
   "PARCELA DE ACORDO",
-  "ACORDO",
-  "NEGOCIACAO",
-  "NEGOCIAÇÃO",
 ];
 
-function removerPrefixos(s: string): string {
+// Tokens que, sozinhos ou compostos só com códigos, NÃO são nomes.
+const STOPWORDS = new Set([
+  "ACORDO",
+  "MENS",
+  "MENSALIDADE",
+  "MENSALIDADES",
+  "CHEQUE",
+  "CHEQUES",
+  "NEGOCIACAO",
+  "NEGOCIAÇÃO",
+  "EDUCACAO",
+  "EDUCAÇÃO",
+  "MATERIAL",
+  "PARCELA",
+  "PARCELAS",
+  "MULTA",
+  "JUROS",
+  "CORRECAO",
+  "CORREÇÃO",
+  "HONORARIOS",
+  "HONORÁRIOS",
+  "DIVIDA",
+  "DÍVIDA",
+  "DEBITO",
+  "DÉBITO",
+  "PRAVC",
+  "EXTRA",
+  "ORIGINAL",
+]);
+
+function removerPrefixosNomeados(s: string): string {
   let resultado = s.trim();
-  for (const prefixo of PREFIXOS_GENERICOS) {
-    const re = new RegExp(`^${prefixo}\\b[\\s:-]*`, "i");
+  for (const prefixo of PREFIXOS_NOMEADOS) {
+    const re = new RegExp(`^${prefixo}\\s+`, "i");
     resultado = resultado.replace(re, "").trim();
   }
   return resultado;
 }
 
-function pareceNome(s: string): boolean {
-  if (!s) return false;
-  // Precisa ter ao menos uma letra e não ser puramente números
-  if (!/[A-Za-zÀ-ÿ]/.test(s)) return false;
-  // Descarta se tem só um caractere
-  if (s.length < 2) return false;
+// Um token "parece nome" se tem só letras/acentos e não é stopword.
+function tokenPareceNome(tok: string): boolean {
+  if (!tok) return false;
+  if (!/^[A-Za-zÀ-ÿ]{2,}$/.test(tok)) return false; // só letras, 2+ chars
+  if (STOPWORDS.has(tok.toUpperCase())) return false;
   return true;
+}
+
+// O valor inteiro parece um nome? Deve ter ao menos 1 token de nome.
+function pareceNomeHumano(s: string): boolean {
+  if (!s) return false;
+  // Contém underscore ou dígitos → é código (MENS_PRAVC, CHEQUE 3)
+  if (/[_\d]/.test(s)) return false;
+
+  const tokens = s.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return false;
+  // Pelo menos UM token precisa ser nome válido
+  return tokens.some(tokenPareceNome);
 }
 
 function titleCase(s: string): string {
@@ -50,15 +94,15 @@ function titleCase(s: string): string {
 
 export function extrairNomesAlunos(titulos: unknown): string {
   const arr = Array.isArray(titulos) ? titulos : [];
-  const conjunto = new Map<string, string>(); // chave normalizada → display
+  const conjunto = new Map<string, string>();
 
   for (const t of arr) {
     if (!t || typeof t !== "object") continue;
     const complemento = (t as { complemento_3?: unknown }).complemento_3;
     if (typeof complemento !== "string") continue;
 
-    const semPrefixo = removerPrefixos(complemento);
-    if (!pareceNome(semPrefixo)) continue;
+    const semPrefixo = removerPrefixosNomeados(complemento);
+    if (!pareceNomeHumano(semPrefixo)) continue;
 
     const display = titleCase(semPrefixo);
     const chave = display.toLowerCase();
@@ -68,17 +112,20 @@ export function extrairNomesAlunos(titulos: unknown): string {
   return Array.from(conjunto.values()).join("; ");
 }
 
-// Detecta se algum título indica acordo anterior (complemento_3 com
-// "PARCELAS DE ACORDO" ou tipo_titulo = "Negociação").
+// Detecta se algum título indica acordo anterior.
+// Sinais (qualquer um basta):
+//   - complemento_3 contém "ACORDO" (sozinho ou "PARCELAS DE ACORDO")
+//   - tipo_titulo contém "Negocia" (ex: "Negociação")
+//   - tipo_titulo = "Acordo"
 export function detectarAcordoAnterior(titulos: unknown): "sim" | "nao" {
   const arr = Array.isArray(titulos) ? titulos : [];
   for (const t of arr) {
     if (!t || typeof t !== "object") continue;
     const obj = t as Record<string, unknown>;
     const complemento = String(obj.complemento_3 ?? "");
-    if (/parcelas?\s+de\s+acordo/i.test(complemento)) return "sim";
+    if (/\bacordo\b/i.test(complemento)) return "sim";
     const tipo = String(obj.tipo_titulo ?? "");
-    if (/negocia/i.test(tipo)) return "sim";
+    if (/negocia|acordo/i.test(tipo)) return "sim";
   }
   return "nao";
 }
