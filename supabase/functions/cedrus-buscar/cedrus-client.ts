@@ -1,12 +1,12 @@
 // Cliente da API Cedrus com Basic Auth (APIKEY como username, senha vazia).
 //
-// Método padrão: POST com body JSON.
-// Em auditoria de produção descobrimos que a API aceita POST com body e
-// respeita os filtros corretamente, mas quando enviamos GET com query
-// string, ela parece ignorar os filtros silenciosamente e retornar dados
-// genéricos (sempre o mesmo devedor "primeiro da fila"). Por isso POST
-// é a forma canônica aqui, mesmo o endpoint /devedor sendo tradicionalmente
-// um GET REST.
+// O endpoint /devedor responde a dois métodos com semânticas diferentes:
+//   - GET  → busca devedores (o que queremos)
+//   - POST → cadastra/atualiza devedor (exige campo NOME obrigatório)
+//
+// Enviamos filtros via query string no GET. O PRD mencionava que a API
+// aceitava GET com body JSON, mas o Deno runtime bloqueia body em GET,
+// então query string é o único caminho viável aqui.
 
 const TIMEOUT_MS = 60_000;
 
@@ -58,7 +58,7 @@ function limparFiltros(
 }
 
 /**
- * Busca devedores na API Cedrus via POST com body JSON.
+ * Busca devedores na API Cedrus via GET com filtros em query string.
  */
 export async function buscarDevedoresCedrus(
   urlBase: string,
@@ -68,21 +68,23 @@ export async function buscarDevedoresCedrus(
   const endpoint = `${urlBase.replace(/\/+$/, "")}/devedor`;
   const limpos = limparFiltros(filters);
 
-  console.log("[cedrus-client] POST", endpoint, "body:", limpos);
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(limpos)) qs.set(k, String(v));
+  const urlFinal = qs.size > 0 ? `${endpoint}?${qs.toString()}` : endpoint;
+
+  console.log("[cedrus-client] GET", urlFinal);
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
 
   let resp: Response;
   try {
-    resp = await fetch(endpoint, {
-      method: "POST",
+    resp = await fetch(urlFinal, {
+      method: "GET",
       headers: {
         Authorization: basicAuth(apikey),
-        "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify(limpos),
       signal: ctrl.signal,
     });
   } catch (err) {
