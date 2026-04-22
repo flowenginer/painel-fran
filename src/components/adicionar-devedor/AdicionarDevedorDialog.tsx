@@ -1,4 +1,5 @@
-// Dialog de adicionar devedor com 3 abas: Por Credor, Por CPF, Manual.
+// Dialog de adicionar devedor com 3 abas: Por Credor (lista ou devedor
+// específico via cod_devedor), Por CPF, Manual.
 import { useState } from "react";
 import { Loader2, Search } from "lucide-react";
 
@@ -55,6 +56,7 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
 
   // Estado das buscas
   const [codCredor, setCodCredor] = useState("");
+  const [codDevedor, setCodDevedor] = useState("");
   const [status, setStatus] = useState<"A" | "P" | "C" | "S">("A");
   const [paginaCedrus, setPaginaCedrus] = useState(1);
   const [cpfBusca, setCpfBusca] = useState("");
@@ -75,6 +77,7 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
     setAba("credor");
     setVista("busca");
     setCodCredor("");
+    setCodDevedor("");
     setStatus("A");
     setPaginaCedrus(1);
     setCpfBusca("");
@@ -89,7 +92,9 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
     onOpenChange(open);
   }
 
-  async function executarBusca(params: CedrusBuscarParams) {
+  async function executarBusca(
+    params: CedrusBuscarParams
+  ): Promise<CedrusBuscarResponse | null> {
     setLoading(true);
     try {
       const resp = await buscarNoCedrus(params);
@@ -101,12 +106,14 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
         });
       }
       setVista("resultado");
+      return resp;
     } catch (err) {
       toast({
         variant: "destructive",
         title: "Erro ao buscar no Cedrus",
         description: err instanceof Error ? err.message : "Erro desconhecido",
       });
+      return null;
     } finally {
       setLoading(false);
     }
@@ -148,11 +155,19 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
       });
       return;
     }
-    await executarBusca({
+    const codDevedorLimpo = codDevedor.trim() || undefined;
+    const resp = await executarBusca({
       cod_credor: codCredor.trim(),
+      cod_devedor: codDevedorLimpo,
       status,
       num_pagina: paginaCedrus,
     });
+
+    // Se o operador informou código específico e veio 1 resultado, abre
+    // direto a revisão (mesmo padrão da busca por CPF).
+    if (codDevedorLimpo && resp?.devedores.length === 1) {
+      abrirRevisao(resp.devedores[0]);
+    }
   }
 
   async function handleBuscarCpf() {
@@ -218,16 +233,24 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
             </TabsList>
 
             <TabsContent value="credor" className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="space-y-1 sm:col-span-1">
-                  <Label className="text-xs">Código do credor</Label>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="space-y-1">
+                  <Label className="text-xs">Código do credor *</Label>
                   <Input
                     value={codCredor}
                     onChange={(e) => setCodCredor(e.target.value)}
                     placeholder="2024"
                   />
                 </div>
-                <div className="space-y-1 sm:col-span-1">
+                <div className="space-y-1">
+                  <Label className="text-xs">Código do devedor</Label>
+                  <Input
+                    value={codDevedor}
+                    onChange={(e) => setCodDevedor(e.target.value)}
+                    placeholder="opcional"
+                  />
+                </div>
+                <div className="space-y-1">
                   <Label className="text-xs">Status</Label>
                   <Select
                     value={status}
@@ -246,7 +269,7 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1 sm:col-span-1">
+                <div className="space-y-1">
                   <Label className="text-xs">Página</Label>
                   <Input
                     type="number"
@@ -255,9 +278,15 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
                     onChange={(e) =>
                       setPaginaCedrus(Math.max(1, Number(e.target.value)))
                     }
+                    disabled={!!codDevedor.trim()}
                   />
                 </div>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Preencha <strong>Código do devedor</strong> para buscar um
+                devedor específico do credor; deixe em branco para listar
+                todos em lote.
+              </p>
               <Button onClick={handleBuscarCredor} disabled={loading}>
                 {loading ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -311,6 +340,7 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
               setPaginaCedrus(proxima);
               await executarBusca({
                 cod_credor: codCredor.trim(),
+                cod_devedor: codDevedor.trim() || undefined,
                 status,
                 num_pagina: proxima,
               });
