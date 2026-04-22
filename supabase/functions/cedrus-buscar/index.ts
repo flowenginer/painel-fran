@@ -172,7 +172,7 @@ Deno.serve(async (req: Request) => {
     const possuiProximaPagina =
       resp.devedores.length >= TAMANHO_PAGINA_CEDRUS;
 
-    const body: Record<string, unknown> = {
+    const respostaBody: Record<string, unknown> = {
       devedores: normalizados,
       pagina,
       tamanhoPagina: TAMANHO_PAGINA_CEDRUS,
@@ -183,11 +183,11 @@ Deno.serve(async (req: Request) => {
 
     // Modo debug: inclui o JSON bruto na resposta para auditoria manual.
     if (filtros.debug) {
-      body.brutoCedrus = resp.devedores;
-      body.filtrosEnviados = cedrusFilters;
+      respostaBody.brutoCedrus = resp.devedores;
+      respostaBody.filtrosEnviados = cedrusFilters;
     }
 
-    return jsonResponse(body);
+    return jsonResponse(respostaBody);
   } catch (err) {
     console.error("[cedrus-buscar] exceção não tratada:", err);
 
