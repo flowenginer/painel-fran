@@ -84,6 +84,14 @@ function concatenarEndereco(b: DevedorCedrusBruto): string | null {
   return partes.length > 0 ? partes.join(", ") : null;
 }
 
+// Cedrus pode retornar "email1@x.com;email2@x.com" — pega o primeiro válido.
+function primeiroEmail(v: unknown): string | null {
+  const s = str(v);
+  if (!s) return null;
+  const partes = s.split(/[;,]/).map((p) => p.trim()).filter(Boolean);
+  return partes[0] ?? null;
+}
+
 export function transformarDevedor(
   bruto: DevedorCedrusBruto
 ): DevedorNormalizado {
@@ -128,8 +136,9 @@ export function transformarDevedor(
     cod_devedor: str(bruto.cod_devedor),
 
     cpf: somenteDigitos(bruto.cnpj_cpf),
-    nome_devedor: str(bruto.nome_devedor) ?? "",
-    email: str(bruto.email),
+    // Cedrus usa "nome"; mantemos fallback em "nome_devedor" por robustez.
+    nome_devedor: str(bruto.nome) ?? str(bruto.nome_devedor) ?? "",
+    email: primeiroEmail(bruto.email),
 
     telefone: telefones.telefone,
     telefone_2: telefones.telefone_2,

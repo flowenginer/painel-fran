@@ -1,5 +1,12 @@
-// Cliente da API Cedrus. Faz GET com body JSON (peculiaridade da API)
-// e Basic Auth usando APIKEY como username e senha vazia.
+// Cliente da API Cedrus com Basic Auth (APIKEY como username, senha vazia).
+//
+// Método padrão: POST com body JSON.
+// Em auditoria de produção descobrimos que a API aceita POST com body e
+// respeita os filtros corretamente, mas quando enviamos GET com query
+// string, ela parece ignorar os filtros silenciosamente e retornar dados
+// genéricos (sempre o mesmo devedor "primeiro da fila"). Por isso POST
+// é a forma canônica aqui, mesmo o endpoint /devedor sendo tradicionalmente
+// um GET REST.
 
 const TIMEOUT_MS = 60_000;
 
@@ -51,10 +58,7 @@ function limparFiltros(
 }
 
 /**
- * Busca devedores na API Cedrus.
- * Filtros via query string no GET (o Deno fetch bloqueia body em GET).
- * Se a API do Cedrus rejeitar query string, fazemos fallback para POST
- * com body JSON.
+ * Busca devedores na API Cedrus via POST com body JSON.
  */
 export async function buscarDevedoresCedrus(
   urlBase: string,
@@ -64,45 +68,23 @@ export async function buscarDevedoresCedrus(
   const endpoint = `${urlBase.replace(/\/+$/, "")}/devedor`;
   const limpos = limparFiltros(filters);
 
-  // Monta query string
-  const qs = new URLSearchParams();
-  for (const [k, v] of Object.entries(limpos)) qs.set(k, String(v));
-  const urlComQS = qs.size > 0 ? `${endpoint}?${qs.toString()}` : endpoint;
+  console.log("[cedrus-client] POST", endpoint, "body:", limpos);
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
 
   let resp: Response;
   try {
-    // Tentativa 1: GET com query string
-    resp = await fetch(urlComQS, {
-      method: "GET",
+    resp = await fetch(endpoint, {
+      method: "POST",
       headers: {
         Authorization: basicAuth(apikey),
+        "Content-Type": "application/json",
         Accept: "application/json",
       },
+      body: JSON.stringify(limpos),
       signal: ctrl.signal,
     });
-
-    // Se a API explicitamente rejeitar (ex: 405), tenta POST com body
-    if (resp.status === 405 || resp.status === 400) {
-      const textoErro = await resp.clone().text();
-      // Só faz fallback se a mensagem sugerir que os filtros não foram
-      // recebidos (evita fallback em 400 legítimo de validação)
-      if (/method|filtros?\s+obrig|sem\s+filtro/i.test(textoErro)) {
-        console.log("[cedrus-client] fallback para POST com body");
-        resp = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            Authorization: basicAuth(apikey),
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify(limpos),
-          signal: ctrl.signal,
-        });
-      }
-    }
   } catch (err) {
     clearTimeout(timer);
     if (err instanceof Error && err.name === "AbortError") {

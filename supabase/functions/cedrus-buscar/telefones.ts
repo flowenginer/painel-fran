@@ -1,5 +1,10 @@
 // Normalização e priorização de telefones brasileiros conforme PRD seção 7.1.
 //
+// O Cedrus entrega telefones de duas formas:
+//   - array de strings ["6281129405", ...]
+//   - array de objetos [{ fone: "6281129405", fone_obs?: "..." }, ...]
+// Cobrimos os dois.
+//
 // Regras:
 // 1. Remove caracteres não numéricos.
 // 2. Descarta se < 10 ou > 13 dígitos.
@@ -44,6 +49,20 @@ function classificar(raw: string): TelefoneClassificado | null {
   return { numero: `55${nacional}`, celular };
 }
 
+// Extrai string do telefone, aceitando tanto formato plano quanto objeto.
+function extrairString(raw: unknown): string | null {
+  if (typeof raw === "string") return raw;
+  if (raw && typeof raw === "object") {
+    const obj = raw as Record<string, unknown>;
+    // Cedrus usa "fone"; fallback para "telefone" e "numero" por garantia.
+    for (const key of ["fone", "telefone", "numero", "number"]) {
+      const v = obj[key];
+      if (typeof v === "string" && v.trim()) return v;
+    }
+  }
+  return null;
+}
+
 export function normalizarTelefones(
   telefones: unknown
 ): TelefonesNormalizados {
@@ -52,8 +71,9 @@ export function normalizarTelefones(
   const seen = new Set<string>();
 
   for (const raw of arr) {
-    if (typeof raw !== "string") continue;
-    const c = classificar(raw);
+    const str = extrairString(raw);
+    if (!str) continue;
+    const c = classificar(str);
     if (!c) continue;
     if (seen.has(c.numero)) continue;
     seen.add(c.numero);
