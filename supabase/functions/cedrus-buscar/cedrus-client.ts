@@ -1,14 +1,16 @@
 // Cliente da API Cedrus com Basic Auth (APIKEY como username, senha vazia).
 //
-// Ponto importante: o endpoint /devedor só filtra corretamente quando recebe
-// os critérios via GET + body JSON (igual ao cURL/Postman/PHP). Via query
-// string a API ignora os filtros e devolve um registro arbitrário. O `fetch`
-// padrão do Deno recusa body em GET (respeita o spec HTTP), então usamos
-// o módulo node:https do shim de Node compatível no Supabase Edge Runtime,
-// que apenas escreve bytes no socket sem validar essa regra.
-
-import https from "node:https";
-import { URL } from "node:url";
+// A API só filtra corretamente quando recebe critérios via GET + body JSON
+// (igual ao cURL/Postman/PHP do cliente). Via query string ela ignora os
+// filtros e devolve registro arbitrário do catálogo.
+//
+// Restrições enfrentadas:
+//   - fetch do Deno bloqueia body em GET (respeita o spec HTTP)
+//   - node:https no Supabase Edge Runtime retorna null em request()
+//
+// Solução: HTTP manual via Deno.connectTls — abrimos um socket TLS,
+// escrevemos os bytes da requisição (request line + headers + body) e
+// lemos a resposta. É como o cURL faz por baixo.
 
 const TIMEOUT_MS = 60_000;
 
@@ -40,12 +42,9 @@ export class CedrusError extends Error {
 }
 
 function basicAuth(apikey: string): string {
-  // Username = apikey, password = ""
-  const b64 = btoa(`${apikey}:`);
-  return `Basic ${b64}`;
+  return `Basic ${btoa(`${apikey}:`)}`;
 }
 
-// Remove campos vazios para não confundir a API.
 function limparFiltros(
   filters: CedrusFilters
 ): Record<string, string | number> {
@@ -59,51 +58,159 @@ function limparFiltros(
 }
 
 /**
- * Executa GET com body JSON usando node:https (análogo ao cURL).
- * O fetch do Deno rejeita body em GET; node:https não tem essa restrição.
+ * Faz GET com body JSON usando TLS direto (Deno.connectTls).
+ * Necessário porque fetch+GET bloqueia body e node:https não funciona
+ * confiavelmente no Supabase Edge Runtime.
  */
-function getComBody(
+async function getComBody(
   endpoint: string,
-  headers: Record<string, string>,
+  authHeader: string,
   body: string,
   timeoutMs: number
 ): Promise<{ status: number; texto: string }> {
   const url = new URL(endpoint);
-  const bodyLen = new TextEncoder().encode(body).byteLength;
+  if (url.protocol !== "https:") {
+    throw new Error("Apenas HTTPS suportado");
+  }
+  const port = url.port ? Number(url.port) : 443;
+  const path = `${url.pathname}${url.search || ""}`;
+  const bodyBytes = new TextEncoder().encode(body);
 
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      {
-        hostname: url.hostname,
-        port: url.port ? Number(url.port) : 443,
-        path: `${url.pathname}${url.search}`,
-        method: "GET",
-        headers: {
-          ...headers,
-          "Content-Type": "application/json",
-          "Content-Length": String(bodyLen),
-        },
-        timeout: timeoutMs,
-      },
-      (res) => {
-        let chunks = "";
-        res.setEncoding("utf8");
-        res.on("data", (c: string) => {
-          chunks += c;
-        });
-        res.on("end", () => {
-          resolve({ status: res.statusCode ?? 0, texto: chunks });
-        });
-        res.on("error", reject);
+  const conn = await Deno.connectTls({ hostname: url.hostname, port });
+
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+
+  try {
+    // Monta request line + headers
+    const headerBlock =
+      [
+        `GET ${path} HTTP/1.1`,
+        `Host: ${url.hostname}${
+          (url.protocol === "https:" && port !== 443) ||
+          (url.protocol === "http:" && port !== 80)
+            ? `:${port}`
+            : ""
+        }`,
+        `Authorization: ${authHeader}`,
+        `Accept: application/json`,
+        `Content-Type: application/json`,
+        `Content-Length: ${bodyBytes.length}`,
+        `Connection: close`,
+        ``,
+        ``,
+      ].join("\r\n");
+
+    await conn.write(new TextEncoder().encode(headerBlock));
+    await conn.write(bodyBytes);
+
+    // Lê toda a resposta até o servidor fechar (Connection: close).
+    const chunks: Uint8Array[] = [];
+    const buf = new Uint8Array(64 * 1024);
+    while (true) {
+      if (ac.signal.aborted) {
+        throw new Error("Timeout");
       }
-    );
-    req.on("error", reject);
-    req.on("timeout", () => {
-      req.destroy(new Error("AbortError"));
-    });
-    req.write(body);
-    req.end();
-  });
+      const n = await Promise.race([
+        conn.read(buf),
+        new Promise<null>((_, rej) => {
+          ac.signal.addEventListener(
+            "abort",
+            () => rej(new Error("Timeout")),
+            { once: true }
+          );
+        }),
+      ]);
+      if (n === null || n === 0) break;
+      chunks.push(buf.slice(0, n));
+    }
+
+    // Concatena todos os chunks
+    const total = chunks.reduce((a, c) => a + c.length, 0);
+    const all = new Uint8Array(total);
+    let off = 0;
+    for (const c of chunks) {
+      all.set(c, off);
+      off += c.length;
+    }
+
+    return parseHttpResponse(all);
+  } finally {
+    clearTimeout(timer);
+    try {
+      conn.close();
+    } catch {
+      /* ignora */
+    }
+  }
+}
+
+// Parser mínimo de resposta HTTP/1.1 (status + headers + body).
+// Suporta Transfer-Encoding: chunked.
+function parseHttpResponse(bytes: Uint8Array): {
+  status: number;
+  texto: string;
+} {
+  // Acha "\r\n\r\n" para separar headers de body
+  let sep = -1;
+  for (let i = 0; i < bytes.length - 3; i++) {
+    if (
+      bytes[i] === 0x0d &&
+      bytes[i + 1] === 0x0a &&
+      bytes[i + 2] === 0x0d &&
+      bytes[i + 3] === 0x0a
+    ) {
+      sep = i;
+      break;
+    }
+  }
+  if (sep < 0) {
+    return { status: 0, texto: new TextDecoder().decode(bytes) };
+  }
+
+  const headersText = new TextDecoder().decode(bytes.slice(0, sep));
+  const bodyBytes = bytes.slice(sep + 4);
+
+  const lines = headersText.split("\r\n");
+  const statusMatch = lines[0]?.match(/^HTTP\/\d\.\d\s+(\d+)/);
+  const status = statusMatch ? Number(statusMatch[1]) : 0;
+
+  const headers: Record<string, string> = {};
+  for (let i = 1; i < lines.length; i++) {
+    const colon = lines[i].indexOf(":");
+    if (colon > 0) {
+      headers[lines[i].slice(0, colon).trim().toLowerCase()] = lines[i]
+        .slice(colon + 1)
+        .trim();
+    }
+  }
+
+  let bodyText: string;
+  if (headers["transfer-encoding"]?.toLowerCase().includes("chunked")) {
+    bodyText = decodeChunked(bodyBytes);
+  } else {
+    bodyText = new TextDecoder().decode(bodyBytes);
+  }
+  return { status, texto: bodyText };
+}
+
+function decodeChunked(bytes: Uint8Array): string {
+  const text = new TextDecoder().decode(bytes);
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    const lineEnd = text.indexOf("\r\n", i);
+    if (lineEnd < 0) break;
+    const sizeHex = text.slice(i, lineEnd).split(";")[0].trim();
+    const size = parseInt(sizeHex, 16);
+    if (Number.isNaN(size)) break;
+    if (size === 0) break;
+    i = lineEnd + 2;
+    if (i + size > text.length) break;
+    out += text.slice(i, i + size);
+    i += size + 2; // CRLF após chunk
+  }
+  return out;
 }
 
 /**
@@ -124,22 +231,16 @@ export async function buscarDevedoresCedrus(
   try {
     resultado = await getComBody(
       endpoint,
-      {
-        Authorization: basicAuth(apikey),
-        Accept: "application/json",
-      },
+      basicAuth(apikey),
       body,
       TIMEOUT_MS
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (/AbortError|timeout/i.test(msg)) {
+    if (/timeout/i.test(msg)) {
       throw new CedrusError("Timeout ao consultar Cedrus (60s).", 504);
     }
-    throw new CedrusError(
-      `Falha de rede ao consultar Cedrus: ${msg}`,
-      502
-    );
+    throw new CedrusError(`Falha de rede ao consultar Cedrus: ${msg}`, 502);
   }
 
   const { status, texto } = resultado;
@@ -159,10 +260,6 @@ export async function buscarDevedoresCedrus(
     );
   }
 
-  // A API pode retornar:
-  // - array direto de devedores
-  // - objeto com { message: "..." } quando não há resultados
-  // - objeto envelopado
   if (Array.isArray(json)) {
     return { devedores: json as Record<string, unknown>[] };
   }
@@ -170,13 +267,11 @@ export async function buscarDevedoresCedrus(
   if (json && typeof json === "object") {
     const obj = json as Record<string, unknown>;
 
-    // Caso "Nenhum devedor encontrado" venha como { message: ... }
     const msg = typeof obj.message === "string" ? obj.message : undefined;
     if (msg && /nenhum|sem\s+result/i.test(msg)) {
       return { devedores: [], rawMessage: msg };
     }
 
-    // Se tiver propriedade devedores ou data array
     if (Array.isArray(obj.devedores)) {
       return { devedores: obj.devedores as Record<string, unknown>[] };
     }
@@ -184,7 +279,6 @@ export async function buscarDevedoresCedrus(
       return { devedores: obj.data as Record<string, unknown>[] };
     }
 
-    // Objeto único (busca por id)
     if (obj.cnpj_cpf || obj.id_devedor || obj.cod_devedor) {
       return { devedores: [obj] };
     }
