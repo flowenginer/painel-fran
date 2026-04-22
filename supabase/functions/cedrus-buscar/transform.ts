@@ -113,13 +113,15 @@ export function transformarDevedor(
     return !STATUS_FECHADO.has(status);
   });
 
-  // Soma valores
+  // Soma valores. Nem todo título tem vl_atualizado preenchido — quando
+  // falta, usamos vl_titulo como estimativa para o valor atualizado não
+  // ficar menor que o original (caso visto em produção).
   let valorOriginal: number | null = null;
   let valorAtualizado: number | null = null;
   for (const t of titulosAbertos) {
     const obj = t as Record<string, unknown>;
     const vOrig = parseBRL(obj.vl_titulo);
-    const vAtu = parseBRL(obj.vl_atualizado);
+    const vAtu = parseBRL(obj.vl_atualizado) ?? vOrig;
     if (vOrig !== null) valorOriginal = (valorOriginal ?? 0) + vOrig;
     if (vAtu !== null) valorAtualizado = (valorAtualizado ?? 0) + vAtu;
   }

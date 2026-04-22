@@ -39,16 +39,20 @@ export async function dispararLote(
 
   if (error) {
     const ctx = (error as { context?: Response }).context;
+    let mensagem: string | null = null;
     if (ctx && typeof ctx.json === "function") {
       try {
         const body = await ctx.json();
-        if (body?.error) throw new Error(body.error);
+        if (body?.error && typeof body.error === "string") {
+          mensagem = body.error;
+        }
       } catch {
         /* ignora */
       }
     }
     throw new Error(
-      error instanceof Error ? error.message : "Falha ao disparar"
+      mensagem ??
+        (error instanceof Error ? error.message : "Falha ao disparar")
     );
   }
   if (!data) throw new Error("Resposta vazia");

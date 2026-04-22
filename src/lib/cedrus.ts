@@ -48,18 +48,22 @@ export async function buscarNoCedrus(
   );
 
   if (error) {
-    // Tenta extrair o corpo da resposta de erro (FunctionsHttpError inclui context)
+    // Tenta extrair o corpo da resposta de erro (FunctionsHttpError inclui context).
     const ctx = (error as { context?: Response }).context;
+    let mensagem: string | null = null;
     if (ctx && typeof ctx.json === "function") {
       try {
         const body = await ctx.json();
-        if (body?.error) throw new Error(body.error);
+        if (body?.error && typeof body.error === "string") {
+          mensagem = body.error;
+        }
       } catch {
-        /* ignora, cai no throw padrão */
+        /* ignora, cai no fallback */
       }
     }
     throw new Error(
-      error instanceof Error ? error.message : "Falha ao consultar Cedrus"
+      mensagem ??
+        (error instanceof Error ? error.message : "Falha ao consultar Cedrus")
     );
   }
 

@@ -167,6 +167,57 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Defesa: quando o operador filtrou por id_devedor/cod_devedor/cnpj_cpf,
+    // exigimos que o devedor retornado confira. Caso a API Cedrus volte a ter
+    // comportamento errático e devolva registro diferente, rejeitamos aqui
+    // para nunca apresentar dados errados ao operador.
+    const checarCampo = (
+      filtro: string | undefined,
+      chaveDevedor: "id_devedor" | "cod_devedor" | "cnpj_cpf"
+    ): string | null => {
+      if (!filtro || resp.devedores.length === 0) return null;
+      const filtroLimpo = String(filtro).replace(/\D/g, "")
+        || String(filtro);
+      const confere = resp.devedores.some((d) => {
+        const v = String(
+          (d as Record<string, unknown>)[chaveDevedor] ?? ""
+        );
+        // compara com e sem dígitos para cobrir CPFs com/sem máscara
+        return (
+          v === String(filtro) ||
+          v.replace(/\D/g, "") === filtroLimpo
+        );
+      });
+      return confere ? null : `${chaveDevedor} solicitado=${filtro}`;
+    };
+
+    const mismatches = [
+      checarCampo(filtros.id_devedor, "id_devedor"),
+      checarCampo(filtros.cod_devedor, "cod_devedor"),
+      checarCampo(filtros.cnpj_cpf, "cnpj_cpf"),
+    ].filter(Boolean);
+
+    if (mismatches.length > 0) {
+      console.error(
+        "[cedrus-buscar] mismatch detectado",
+        mismatches,
+        "recebidos:",
+        resp.devedores.slice(0, 3).map((d) => ({
+          id_devedor: (d as Record<string, unknown>).id_devedor,
+          cod_devedor: (d as Record<string, unknown>).cod_devedor,
+          cnpj_cpf: (d as Record<string, unknown>).cnpj_cpf,
+        }))
+      );
+      return jsonResponse(
+        {
+          error:
+            "A API Cedrus retornou um devedor diferente do solicitado. Tente informar o código do credor junto para busca precisa.",
+          mismatches,
+        },
+        404
+      );
+    }
+
     // Etapa 6: normalizar
     const normalizados = resp.devedores.map(transformarDevedor);
     const possuiProximaPagina =

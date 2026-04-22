@@ -287,9 +287,9 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Informe ao menos um dos códigos. Com os dois preenchidos,
-                busca um devedor específico do credor; só com o credor,
-                lista todos em lote.
+                Informe ao menos um dos códigos. <strong>Código do devedor</strong>{" "}
+                sozinho busca um devedor específico; <strong>código do credor</strong>{" "}
+                sozinho lista em lote; os dois juntos refinam a busca.
               </p>
               <Button onClick={handleBuscarCredor} disabled={loading}>
                 {loading ? (
