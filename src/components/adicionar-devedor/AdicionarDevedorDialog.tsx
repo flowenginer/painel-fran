@@ -148,16 +148,20 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
   }
 
   async function handleBuscarCredor() {
-    if (!codCredor.trim()) {
+    const codCredorLimpo = codCredor.trim() || undefined;
+    const codDevedorLimpo = codDevedor.trim() || undefined;
+
+    if (!codCredorLimpo && !codDevedorLimpo) {
       toast({
         variant: "destructive",
-        title: "Informe o código do credor",
+        title: "Informe ao menos um código",
+        description: "Preencha o código do credor, do devedor, ou ambos.",
       });
       return;
     }
-    const codDevedorLimpo = codDevedor.trim() || undefined;
+
     const resp = await executarBusca({
-      cod_credor: codCredor.trim(),
+      cod_credor: codCredorLimpo,
       cod_devedor: codDevedorLimpo,
       status,
       num_pagina: paginaCedrus,
@@ -235,7 +239,7 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
             <TabsContent value="credor" className="space-y-4">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div className="space-y-1">
-                  <Label className="text-xs">Código do credor *</Label>
+                  <Label className="text-xs">Código do credor</Label>
                   <Input
                     value={codCredor}
                     onChange={(e) => setCodCredor(e.target.value)}
@@ -283,9 +287,9 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Preencha <strong>Código do devedor</strong> para buscar um
-                devedor específico do credor; deixe em branco para listar
-                todos em lote.
+                Informe ao menos um dos códigos. Com os dois preenchidos,
+                busca um devedor específico do credor; só com o credor,
+                lista todos em lote.
               </p>
               <Button onClick={handleBuscarCredor} disabled={loading}>
                 {loading ? (
