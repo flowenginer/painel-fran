@@ -30,6 +30,10 @@ interface Props {
   inicial: ReviewFormType;
   // Flags para destacar campos que precisam de atenção (vazios/não detectados).
   destaques?: Partial<Record<keyof ReviewFormType, boolean>>;
+  // Modo manual: operador digita tudo, sem consulta ao Cedrus. Libera os
+  // campos de valores (que no modo Cedrus são agregados) e troca o campo
+  // de instituição por um Select com as já cadastradas.
+  modoManual?: boolean;
   onSuccess: () => void;
   onCancel: () => void;
 }
@@ -37,6 +41,7 @@ interface Props {
 export function DevedorReviewForm({
   inicial,
   destaques,
+  modoManual = false,
   onSuccess,
   onCancel,
 }: Props) {
@@ -318,20 +323,51 @@ export function DevedorReviewForm({
             )}
           </p>
         )}
-        <Campo label="Nome da instituição *" error={errorMsg("instituicao")}>
-          <Input
-            value={form.instituicao}
-            onChange={(e) => {
-              set("instituicao", e.target.value);
-              if (codCredor && !instMapping) setNovaInstituicao(true);
-            }}
-            placeholder="Escola M.L. (JD. Presidente)"
-            className={cn(
-              highlight("instituicao"),
-              novaInstituicao && !instMapping && "border-yellow-500/50"
-            )}
-          />
-        </Campo>
+        {modoManual ? (
+          <Campo label="Instituição *" error={errorMsg("instituicao")}>
+            <Select
+              value={form.instituicao}
+              onValueChange={(v) => set("instituicao", v)}
+            >
+              <SelectTrigger className={cn(highlight("instituicao"))}>
+                <SelectValue placeholder="Selecione uma instituição cadastrada" />
+              </SelectTrigger>
+              <SelectContent>
+                {(instituicoes ?? [])
+                  .filter((i) => i.ativo)
+                  .map((i) => (
+                    <SelectItem key={i.id} value={i.nome}>
+                      {i.nome}
+                    </SelectItem>
+                  ))}
+                {(!instituicoes || instituicoes.length === 0) && (
+                  <div className="px-3 py-2 text-xs text-muted-foreground">
+                    Nenhuma instituição cadastrada. Vá em "Instituições" e
+                    cadastre primeiro.
+                  </div>
+                )}
+              </SelectContent>
+            </Select>
+          </Campo>
+        ) : (
+          <Campo
+            label="Nome da instituição *"
+            error={errorMsg("instituicao")}
+          >
+            <Input
+              value={form.instituicao}
+              onChange={(e) => {
+                set("instituicao", e.target.value);
+                if (codCredor && !instMapping) setNovaInstituicao(true);
+              }}
+              placeholder="Escola M.L. (JD. Presidente)"
+              className={cn(
+                highlight("instituicao"),
+                novaInstituicao && !instMapping && "border-yellow-500/50"
+              )}
+            />
+          </Campo>
+        )}
       </section>
 
       {/* Informações do aluno/dívida */}
@@ -345,40 +381,119 @@ export function DevedorReviewForm({
           />
         </Campo>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Campo label="Valor original">
-            <Input
-              readOnly
-              value={formatBRL(form.valor_original)}
-              className="bg-muted/30"
-            />
-          </Campo>
-          <Campo label="Valor atualizado">
-            <Input
-              readOnly
-              value={formatBRL(form.valor_atualizado)}
-              className="bg-muted/30"
-            />
-          </Campo>
-          <Campo label="Parcelas em aberto">
-            <Input
-              readOnly
-              value={form.qtd_parcelas_aberto ?? "—"}
-              className="bg-muted/30"
-            />
-          </Campo>
-          <Campo label="Período">
-            <Input
-              readOnly
-              value={
-                form.ano_inicial_dividas && form.ano_final_dividas
-                  ? `${form.ano_inicial_dividas}–${form.ano_final_dividas}`
-                  : "—"
-              }
-              className="bg-muted/30"
-            />
-          </Campo>
-        </div>
+        {modoManual ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Campo label="Valor original">
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.valor_original ?? ""}
+                onChange={(e) =>
+                  set(
+                    "valor_original",
+                    e.target.value === "" ? null : Number(e.target.value)
+                  )
+                }
+                placeholder="0,00"
+              />
+            </Campo>
+            <Campo label="Valor atualizado">
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.valor_atualizado ?? ""}
+                onChange={(e) =>
+                  set(
+                    "valor_atualizado",
+                    e.target.value === "" ? null : Number(e.target.value)
+                  )
+                }
+                placeholder="0,00"
+              />
+            </Campo>
+            <Campo label="Parcelas em aberto">
+              <Input
+                type="number"
+                min="0"
+                value={form.qtd_parcelas_aberto ?? ""}
+                onChange={(e) =>
+                  set(
+                    "qtd_parcelas_aberto",
+                    e.target.value === "" ? null : Number(e.target.value)
+                  )
+                }
+                placeholder="0"
+              />
+            </Campo>
+            <Campo label="Ano inicial">
+              <Input
+                type="number"
+                min="1990"
+                max="2100"
+                value={form.ano_inicial_dividas ?? ""}
+                onChange={(e) =>
+                  set(
+                    "ano_inicial_dividas",
+                    e.target.value === "" ? null : Number(e.target.value)
+                  )
+                }
+                placeholder="2020"
+              />
+            </Campo>
+            <Campo label="Ano final">
+              <Input
+                type="number"
+                min="1990"
+                max="2100"
+                value={form.ano_final_dividas ?? ""}
+                onChange={(e) =>
+                  set(
+                    "ano_final_dividas",
+                    e.target.value === "" ? null : Number(e.target.value)
+                  )
+                }
+                placeholder="2026"
+              />
+            </Campo>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Campo label="Valor original">
+              <Input
+                readOnly
+                value={formatBRL(form.valor_original)}
+                className="bg-muted/30"
+              />
+            </Campo>
+            <Campo label="Valor atualizado">
+              <Input
+                readOnly
+                value={formatBRL(form.valor_atualizado)}
+                className="bg-muted/30"
+              />
+            </Campo>
+            <Campo label="Parcelas em aberto">
+              <Input
+                readOnly
+                value={form.qtd_parcelas_aberto ?? "—"}
+                className="bg-muted/30"
+              />
+            </Campo>
+            <Campo label="Período">
+              <Input
+                readOnly
+                value={
+                  form.ano_inicial_dividas && form.ano_final_dividas
+                    ? `${form.ano_inicial_dividas}–${form.ano_final_dividas}`
+                    : "—"
+                }
+                className="bg-muted/30"
+              />
+            </Campo>
+          </div>
+        )}
 
         <Campo label="Acordo anterior">
           <Select

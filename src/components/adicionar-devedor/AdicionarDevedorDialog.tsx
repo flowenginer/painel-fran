@@ -69,6 +69,8 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
   const [destaques, setDestaques] = useState<
     Partial<Record<keyof ReviewFormType, boolean>> | undefined
   >(undefined);
+  // Marca o form atual como cadastro manual (sem dados do Cedrus).
+  const [modoManual, setModoManual] = useState(false);
 
   const { toast } = useToast();
   const { data: instituicoes } = useInstituicoes();
@@ -84,6 +86,7 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
     setResultado(null);
     setFormInicial(null);
     setDestaques(undefined);
+    setModoManual(false);
     setLoading(false);
   }
 
@@ -133,6 +136,7 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
       instituicao: !form.instituicao,
       tratamento: !d.nome_devedor,
     });
+    setModoManual(false);
     setVista("revisao");
   }
 
@@ -144,6 +148,7 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
       telefone: true,
       instituicao: true,
     });
+    setModoManual(true);
     setVista("revisao");
   }
 
@@ -360,6 +365,7 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
             key={`${formInicial.cpf}-${formInicial.cod_devedor ?? "novo"}`}
             inicial={formInicial}
             destaques={destaques}
+            modoManual={modoManual}
             onCancel={voltarParaBusca}
             onSuccess={() => {
               // Se veio de lista, volta pra lista; senão fecha.
