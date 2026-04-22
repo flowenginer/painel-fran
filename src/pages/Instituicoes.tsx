@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -34,11 +34,13 @@ import {
 } from "@/hooks/useInstituicoesMutations";
 import { useToast } from "@/hooks/use-toast";
 import { InstituicaoDialog } from "@/components/instituicoes/InstituicaoDialog";
+import { ImportarCsvDialog } from "@/components/instituicoes/ImportarCsvDialog";
 import type { Instituicao } from "@/lib/types";
 
 export function Instituicoes() {
   const { data, isLoading, isError } = useInstituicoes();
   const [formOpen, setFormOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editando, setEditando] = useState<Instituicao | null>(null);
   const [removendo, setRemovendo] = useState<Instituicao | null>(null);
 
@@ -100,10 +102,16 @@ export function Instituicoes() {
             Mapeamento de cod_credor → nome legível usado na importação.
           </p>
         </div>
-        <Button onClick={abrirNova}>
-          <Plus className="mr-2 h-4 w-4" />
-          Nova instituição
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Importar CSV
+          </Button>
+          <Button onClick={abrirNova}>
+            <Plus className="mr-2 h-4 w-4" />
+            Nova instituição
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -228,6 +236,8 @@ export function Instituicoes() {
         onOpenChange={setFormOpen}
         inicial={editando}
       />
+
+      <ImportarCsvDialog open={importOpen} onOpenChange={setImportOpen} />
 
       <Dialog
         open={!!removendo}
