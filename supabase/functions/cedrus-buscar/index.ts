@@ -24,6 +24,8 @@ interface RequestBody {
   dt_vencimento_de?: string;
   dt_vencimento_ate?: string;
   num_pagina?: number;
+  /** Se true, inclui o JSON bruto da Cedrus na resposta para auditoria. */
+  debug?: boolean;
 }
 
 function validarBody(body: unknown): RequestBody {
@@ -55,6 +57,7 @@ function validarBody(body: unknown): RequestBody {
     if (!Number.isFinite(n) || n < 1) throw new Error("num_pagina inválido");
     result.num_pagina = Math.floor(n);
   }
+  if (b.debug === true) result.debug = true;
 
   if (
     !result.id_devedor &&
@@ -140,27 +143,51 @@ Deno.serve(async (req: Request) => {
 
     console.log("[cedrus-buscar] chamando cedrus", {
       urlBase,
-      filtros: Object.keys(cedrusFilters),
+      filtrosEnviados: cedrusFilters,
     });
     const resp = await buscarDevedoresCedrus(urlBase, apikey, cedrusFilters);
     console.log("[cedrus-buscar] cedrus retornou", {
       count: resp.devedores.length,
       message: resp.rawMessage,
+      // Limita o snapshot para 10 primeiros para não explodir log
+      primeiros3IdsECpfs: resp.devedores.slice(0, 10).map((d) => ({
+        id_devedor: (d as Record<string, unknown>).id_devedor,
+        cod_credor: (d as Record<string, unknown>).cod_credor,
+        cod_devedor: (d as Record<string, unknown>).cod_devedor,
+        cnpj_cpf: (d as Record<string, unknown>).cnpj_cpf,
+        nome_devedor: (d as Record<string, unknown>).nome_devedor,
+      })),
     });
+    // JSON bruto completo do primeiro devedor (pra auditoria de campos)
+    if (resp.devedores.length > 0) {
+      const primeiro = resp.devedores[0];
+      console.log(
+        "[cedrus-buscar] bruto primeiro devedor:",
+        JSON.stringify(primeiro).slice(0, 5000)
+      );
+    }
 
     // Etapa 6: normalizar
     const normalizados = resp.devedores.map(transformarDevedor);
     const possuiProximaPagina =
       resp.devedores.length >= TAMANHO_PAGINA_CEDRUS;
 
-    return jsonResponse({
+    const body: Record<string, unknown> = {
       devedores: normalizados,
       pagina,
       tamanhoPagina: TAMANHO_PAGINA_CEDRUS,
       possuiProximaPagina,
       total: resp.devedores.length,
       message: resp.rawMessage,
-    });
+    };
+
+    // Modo debug: inclui o JSON bruto na resposta para auditoria manual.
+    if (filtros.debug) {
+      body.brutoCedrus = resp.devedores;
+      body.filtrosEnviados = cedrusFilters;
+    }
+
+    return jsonResponse(body);
   } catch (err) {
     console.error("[cedrus-buscar] exceção não tratada:", err);
 

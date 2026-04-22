@@ -69,6 +69,8 @@ export async function buscarDevedoresCedrus(
   for (const [k, v] of Object.entries(limpos)) qs.set(k, String(v));
   const urlComQS = qs.size > 0 ? `${endpoint}?${qs.toString()}` : endpoint;
 
+  console.log("[cedrus-client] GET", urlComQS.replace(apikey, "***"));
+
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
 
