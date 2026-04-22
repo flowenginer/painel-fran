@@ -182,6 +182,30 @@ export function DevedorReviewForm({
         </div>
       )}
 
+      {/* Identificação Cedrus (read-only) */}
+      {(form.id_devedor || form.cod_credor || form.cod_devedor) && (
+        <div className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
+          <p className="font-medium text-foreground mb-1">Identificação Cedrus</p>
+          <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
+            {form.id_devedor && (
+              <span>
+                id_devedor: <code className="font-mono">{form.id_devedor}</code>
+              </span>
+            )}
+            {form.cod_credor && (
+              <span>
+                cod_credor: <code className="font-mono">{form.cod_credor}</code>
+              </span>
+            )}
+            {form.cod_devedor && (
+              <span>
+                cod_devedor: <code className="font-mono">{form.cod_devedor}</code>
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Identificação */}
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Campo
