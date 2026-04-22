@@ -1,12 +1,14 @@
 // Cliente da API Cedrus com Basic Auth (APIKEY como username, senha vazia).
 //
-// O endpoint /devedor responde a dois métodos com semânticas diferentes:
-//   - GET  → busca devedores (o que queremos)
-//   - POST → cadastra/atualiza devedor (exige campo NOME obrigatório)
-//
-// Enviamos filtros via query string no GET. O PRD mencionava que a API
-// aceitava GET com body JSON, mas o Deno runtime bloqueia body em GET,
-// então query string é o único caminho viável aqui.
+// Ponto importante: o endpoint /devedor só filtra corretamente quando recebe
+// os critérios via GET + body JSON (igual ao cURL/Postman/PHP). Via query
+// string a API ignora os filtros e devolve um registro arbitrário. O `fetch`
+// padrão do Deno recusa body em GET (respeita o spec HTTP), então usamos
+// o módulo node:https do shim de Node compatível no Supabase Edge Runtime,
+// que apenas escreve bytes no socket sem validar essa regra.
+
+import https from "node:https";
+import { URL } from "node:url";
 
 const TIMEOUT_MS = 60_000;
 
@@ -22,7 +24,6 @@ export interface CedrusFilters {
 }
 
 export interface CedrusResponse {
-  // A API Cedrus retorna variações — normalizamos para um array de devedores.
   devedores: Record<string, unknown>[];
   rawMessage?: string;
 }
@@ -58,7 +59,55 @@ function limparFiltros(
 }
 
 /**
- * Busca devedores na API Cedrus via GET com filtros em query string.
+ * Executa GET com body JSON usando node:https (análogo ao cURL).
+ * O fetch do Deno rejeita body em GET; node:https não tem essa restrição.
+ */
+function getComBody(
+  endpoint: string,
+  headers: Record<string, string>,
+  body: string,
+  timeoutMs: number
+): Promise<{ status: number; texto: string }> {
+  const url = new URL(endpoint);
+  const bodyLen = new TextEncoder().encode(body).byteLength;
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: url.hostname,
+        port: url.port ? Number(url.port) : 443,
+        path: `${url.pathname}${url.search}`,
+        method: "GET",
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+          "Content-Length": String(bodyLen),
+        },
+        timeout: timeoutMs,
+      },
+      (res) => {
+        let chunks = "";
+        res.setEncoding("utf8");
+        res.on("data", (c: string) => {
+          chunks += c;
+        });
+        res.on("end", () => {
+          resolve({ status: res.statusCode ?? 0, texto: chunks });
+        });
+        res.on("error", reject);
+      }
+    );
+    req.on("error", reject);
+    req.on("timeout", () => {
+      req.destroy(new Error("AbortError"));
+    });
+    req.write(body);
+    req.end();
+  });
+}
+
+/**
+ * Busca devedores na API Cedrus via GET com body JSON.
  */
 export async function buscarDevedoresCedrus(
   urlBase: string,
@@ -67,41 +116,34 @@ export async function buscarDevedoresCedrus(
 ): Promise<CedrusResponse> {
   const endpoint = `${urlBase.replace(/\/+$/, "")}/devedor`;
   const limpos = limparFiltros(filters);
+  const body = JSON.stringify(limpos);
 
-  const qs = new URLSearchParams();
-  for (const [k, v] of Object.entries(limpos)) qs.set(k, String(v));
-  const urlFinal = qs.size > 0 ? `${endpoint}?${qs.toString()}` : endpoint;
+  console.log("[cedrus-client] GET+body", endpoint, body);
 
-  console.log("[cedrus-client] GET", urlFinal);
-
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-
-  let resp: Response;
+  let resultado: { status: number; texto: string };
   try {
-    resp = await fetch(urlFinal, {
-      method: "GET",
-      headers: {
+    resultado = await getComBody(
+      endpoint,
+      {
         Authorization: basicAuth(apikey),
         Accept: "application/json",
       },
-      signal: ctrl.signal,
-    });
+      body,
+      TIMEOUT_MS
+    );
   } catch (err) {
-    clearTimeout(timer);
-    if (err instanceof Error && err.name === "AbortError") {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/AbortError|timeout/i.test(msg)) {
       throw new CedrusError("Timeout ao consultar Cedrus (60s).", 504);
     }
     throw new CedrusError(
-      `Falha de rede ao consultar Cedrus: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
+      `Falha de rede ao consultar Cedrus: ${msg}`,
       502
     );
   }
-  clearTimeout(timer);
 
-  const texto = await resp.text();
+  const { status, texto } = resultado;
+
   let json: unknown;
   try {
     json = texto ? JSON.parse(texto) : null;
@@ -109,10 +151,10 @@ export async function buscarDevedoresCedrus(
     json = null;
   }
 
-  if (!resp.ok) {
+  if (status < 200 || status >= 300) {
     throw new CedrusError(
-      `Cedrus retornou HTTP ${resp.status}`,
-      resp.status,
+      `Cedrus retornou HTTP ${status}`,
+      status,
       json ?? texto
     );
   }
