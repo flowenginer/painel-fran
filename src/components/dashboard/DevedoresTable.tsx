@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { ChevronLeft, ChevronRight, Inbox, MoreHorizontal } from "lucide-react";
+import { ChevronLeft, ChevronRight, Inbox } from "lucide-react";
 
 import {
   Table,
@@ -24,8 +24,10 @@ import {
   type SortField,
 } from "@/hooks/useDevedores";
 import type { DevedoresTableState } from "@/hooks/useDevedoresFilters";
+import type { Devedor } from "@/lib/types";
 import { StatusBadge } from "./StatusBadge";
 import { SortableHead } from "./SortableHead";
+import { DevedorAcoes } from "./DevedorAcoes";
 
 interface DevedoresTableProps {
   state: DevedoresTableState;
@@ -37,6 +39,9 @@ interface DevedoresTableProps {
   selecionados: Set<number>;
   onToggleSelecionado: (id: number) => void;
   onTogglePaginaAtual: (ids: number[]) => void;
+  // Ações por linha.
+  onEditarDevedor: (d: Devedor) => void;
+  onRemoverDevedor: (d: Devedor) => void;
 }
 
 export function DevedoresTable({
@@ -48,6 +53,8 @@ export function DevedoresTable({
   selecionados,
   onToggleSelecionado,
   onTogglePaginaAtual,
+  onEditarDevedor,
+  onRemoverDevedor,
 }: DevedoresTableProps) {
   const { page, filters, sortField, sortDirection } = state;
   const { data, isLoading, isError, error } = useDevedores({
@@ -210,15 +217,11 @@ export function DevedoresTable({
                       {formatTempoRelativo(d.data_ultimo_contato)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        disabled
-                        aria-label="Ações"
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
+                      <DevedorAcoes
+                        devedor={d}
+                        onEditar={onEditarDevedor}
+                        onRemover={onRemoverDevedor}
+                      />
                     </TableCell>
                   </TableRow>
                 );

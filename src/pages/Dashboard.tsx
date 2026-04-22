@@ -13,6 +13,8 @@ import { DevedoresTable } from "@/components/dashboard/DevedoresTable";
 import { FiltrosBar } from "@/components/dashboard/FiltrosBar";
 import { KpiCards } from "@/components/dashboard/KpiCards";
 import { DispararDialog } from "@/components/dashboard/DispararDialog";
+import { EditarDevedorDialog } from "@/components/dashboard/EditarDevedorDialog";
+import { RemoverDevedorDialog } from "@/components/dashboard/RemoverDevedorDialog";
 import { AdicionarDevedorDialog } from "@/components/adicionar-devedor/AdicionarDevedorDialog";
 import { useDevedoresFilters } from "@/hooks/useDevedoresFilters";
 import { useDevedoresRealtime } from "@/hooks/useDevedoresRealtime";
@@ -20,6 +22,7 @@ import { useSelecaoDevedores } from "@/hooks/useSelecaoDevedores";
 import { useKpis } from "@/hooks/useKpis";
 import { useConfig } from "@/hooks/useConfig";
 import { horaAtualSaoPaulo } from "@/lib/dates";
+import type { Devedor } from "@/lib/types";
 
 function dentroDoHorario(inicio: string, fim: string): boolean {
   const { hora, minuto } = horaAtualSaoPaulo();
@@ -37,6 +40,10 @@ export function Dashboard() {
 
   const [adicionarOpen, setAdicionarOpen] = useState(false);
   const [dispararOpen, setDispararOpen] = useState(false);
+  const [editandoDevedor, setEditandoDevedor] = useState<Devedor | null>(null);
+  const [removendoDevedor, setRemovendoDevedor] = useState<Devedor | null>(
+    null
+  );
 
   const { data: kpis } = useKpis();
   const { data: config } = useConfig();
@@ -148,6 +155,18 @@ export function Dashboard() {
         onSuccess={limpar}
       />
 
+      <EditarDevedorDialog
+        open={editandoDevedor !== null}
+        onOpenChange={(open) => !open && setEditandoDevedor(null)}
+        devedor={editandoDevedor}
+      />
+
+      <RemoverDevedorDialog
+        open={removendoDevedor !== null}
+        onOpenChange={(open) => !open && setRemovendoDevedor(null)}
+        devedor={removendoDevedor}
+      />
+
       <KpiCards />
 
       <Card>
@@ -174,6 +193,8 @@ export function Dashboard() {
             selecionados={selecionados}
             onToggleSelecionado={toggle}
             onTogglePaginaAtual={togglePagina}
+            onEditarDevedor={setEditandoDevedor}
+            onRemoverDevedor={setRemovendoDevedor}
           />
         </CardContent>
       </Card>
