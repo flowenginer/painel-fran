@@ -355,6 +355,9 @@ export function AdicionarDevedorDialog({ open, onOpenChange }: Props) {
         {/* Modal de revisão */}
         {vista === "revisao" && formInicial && (
           <DevedorReviewForm
+            // Key única força remount completo quando mudamos de devedor
+            // (evita reaproveitar state de buscas anteriores).
+            key={`${formInicial.cpf}-${formInicial.cod_devedor ?? "novo"}`}
             inicial={formInicial}
             destaques={destaques}
             onCancel={voltarParaBusca}

@@ -98,11 +98,19 @@ export function transformarDevedor(
   const titulosRaw = bruto.titulos;
   const titulos = Array.isArray(titulosRaw) ? titulosRaw : [];
 
-  // Filtra só títulos em aberto (status = A) para agregados.
+  // Títulos em aberto: tudo exceto Pago, Cancelado e Suspenso.
+  // A API pode retornar "A" (Aberto), "N" (Negociado mas em aberto), vazio,
+  // ou outros valores. Auditoria mostrou casos com título sob "N" que ainda
+  // precisa ser cobrado — filtrar só por "A" perdia a maior parte da dívida.
+  const STATUS_FECHADO = new Set(["P", "C", "S"]);
   const titulosAbertos = titulos.filter((t) => {
     if (!t || typeof t !== "object") return false;
-    const status = (t as Record<string, unknown>).status;
-    return String(status ?? "").toUpperCase() === "A";
+    const status = String(
+      (t as Record<string, unknown>).status ?? ""
+    )
+      .trim()
+      .toUpperCase();
+    return !STATUS_FECHADO.has(status);
   });
 
   // Soma valores
