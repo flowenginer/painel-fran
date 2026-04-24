@@ -4,6 +4,8 @@ import { supabase } from "./supabase";
 export interface DispararLoteParams {
   devedor_ids: number[];
   campanha?: string;
+  /** Se true, é um reenvio (não requer status=pendente). */
+  reenviar?: boolean;
 }
 
 export interface DispararLoteResponse {

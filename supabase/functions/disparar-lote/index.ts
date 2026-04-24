@@ -16,6 +16,12 @@ const TZ = "America/Sao_Paulo";
 interface RequestBody {
   devedor_ids: number[];
   campanha?: string;
+  /**
+   * Se true, é um reenvio da primeira mensagem (não requer status=pendente).
+   * Usado a partir do dropdown de ações do devedor. Quem já fechou acordo
+   * (status=acordo_aceito) continua bloqueado para proteger negociações.
+   */
+  reenviar?: boolean;
 }
 
 interface DevedorRow {
@@ -56,7 +62,8 @@ function validarBody(raw: unknown): RequestBody {
     typeof b.campanha === "string" && b.campanha.trim().length > 0
       ? b.campanha.trim()
       : undefined;
-  return { devedor_ids: parsed, campanha };
+  const reenviar = b.reenviar === true;
+  return { devedor_ids: parsed, campanha, reenviar };
 }
 
 function inicioHojeSaoPauloUTC(): string {
@@ -138,7 +145,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = await req.json().catch(() => null);
-    const { devedor_ids, campanha } = validarBody(body);
+    const { devedor_ids, campanha, reenviar } = validarBody(body);
 
     // 1. Lê configs
     const cfg = await lerConfig(env, [
@@ -228,12 +235,25 @@ Deno.serve(async (req: Request) => {
         inelegiveis.push({ id, motivo: "Devedor não encontrado" });
         continue;
       }
-      if (d.status_negociacao !== "pendente") {
-        inelegiveis.push({
-          id,
-          motivo: `Status é ${d.status_negociacao ?? "indefinido"}, esperava pendente`,
-        });
-        continue;
+      if (reenviar) {
+        // Reenvio: só proíbe devedores com acordo já aceito (para não
+        // perturbar negociações fechadas).
+        if (d.status_negociacao === "acordo_aceito") {
+          inelegiveis.push({
+            id,
+            motivo: "Devedor já fechou acordo — reenvio bloqueado",
+          });
+          continue;
+        }
+      } else {
+        // Disparo inicial: exige status=pendente.
+        if (d.status_negociacao !== "pendente") {
+          inelegiveis.push({
+            id,
+            motivo: `Status é ${d.status_negociacao ?? "indefinido"}, esperava pendente`,
+          });
+          continue;
+        }
       }
       if (!d.telefone || d.telefone.trim().length < 12) {
         inelegiveis.push({ id, motivo: "Sem telefone válido" });
@@ -253,6 +273,7 @@ Deno.serve(async (req: Request) => {
     const payload = {
       campanha,
       usuario_id: usuarioId,
+      reenviar: reenviar ?? false,
       devedores: elegiveis.map(montarPayloadDevedor),
     };
 
@@ -316,18 +337,24 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 7. Atualiza status se sucesso
+    // 7. Atualiza devedores se sucesso
     if (webhookOk) {
       const idsList = elegiveis.map((d) => d.id).join(",");
+      // No reenvio, preserva status e data_primeiro_disparo — só marca que
+      // houve contato agora. No disparo inicial, muda para primeira_msg e
+      // grava o primeiro disparo.
+      const patch: Record<string, unknown> = reenviar
+        ? { data_ultimo_contato: agora }
+        : {
+            status_negociacao: "primeira_msg",
+            data_primeiro_disparo: agora,
+            data_ultimo_contato: agora,
+          };
       const updResp = await rest(
         env,
         "PATCH",
         `/fran_devedores?id=in.(${idsList})`,
-        {
-          status_negociacao: "primeira_msg",
-          data_primeiro_disparo: agora,
-          data_ultimo_contato: agora,
-        },
+        patch,
         { Prefer: "return=minimal" }
       );
       if (!updResp.ok) {

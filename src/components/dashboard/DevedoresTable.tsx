@@ -41,6 +41,7 @@ interface DevedoresTableProps {
   onTogglePaginaAtual: (ids: number[]) => void;
   // Ações por linha.
   onEditarDevedor: (d: Devedor) => void;
+  onReenviarMensagem: (d: Devedor) => void;
   onRemoverDevedor: (d: Devedor) => void;
 }
 
@@ -54,6 +55,7 @@ export function DevedoresTable({
   onToggleSelecionado,
   onTogglePaginaAtual,
   onEditarDevedor,
+  onReenviarMensagem,
   onRemoverDevedor,
 }: DevedoresTableProps) {
   const { page, filters, sortField, sortDirection } = state;
@@ -220,6 +222,7 @@ export function DevedoresTable({
                       <DevedorAcoes
                         devedor={d}
                         onEditar={onEditarDevedor}
+                        onReenviar={onReenviarMensagem}
                         onRemover={onRemoverDevedor}
                       />
                     </TableCell>
