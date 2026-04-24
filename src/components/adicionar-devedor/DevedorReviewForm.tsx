@@ -3,6 +3,7 @@ import { AlertTriangle, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { InputValorBRL } from "@/components/ui/input-valor-brl";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -384,33 +385,15 @@ export function DevedorReviewForm({
         {modoManual ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Campo label="Valor original">
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={form.valor_original ?? ""}
-                onChange={(e) =>
-                  set(
-                    "valor_original",
-                    e.target.value === "" ? null : Number(e.target.value)
-                  )
-                }
-                placeholder="0,00"
+              <InputValorBRL
+                valor={form.valor_original}
+                onChange={(v) => set("valor_original", v)}
               />
             </Campo>
             <Campo label="Valor atualizado">
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={form.valor_atualizado ?? ""}
-                onChange={(e) =>
-                  set(
-                    "valor_atualizado",
-                    e.target.value === "" ? null : Number(e.target.value)
-                  )
-                }
-                placeholder="0,00"
+              <InputValorBRL
+                valor={form.valor_atualizado}
+                onChange={(v) => set("valor_atualizado", v)}
               />
             </Campo>
             <Campo label="Parcelas em aberto">
