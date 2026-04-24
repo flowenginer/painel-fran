@@ -25,6 +25,60 @@ export function formatBRL(valor: number | null | undefined): string {
   }).format(valor);
 }
 
+// Formata sem prefixo R$ (para usar dentro de inputs): "34.000,00"
+export function formatBRLSemPrefixo(
+  valor: number | null | undefined
+): string {
+  if (valor === null || valor === undefined) return "";
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(valor);
+}
+
+// Parse de string em formato brasileiro para número.
+// Regras:
+//   - Remove "R$", espaços e qualquer caractere que não seja dígito/.,-
+//   - Se tem vírgula: parte antes da última vírgula é inteira (pontos = milhar,
+//     removidos); depois é a parte decimal.
+//   - Se só tem ponto: tratamos como separador de milhar (padrão pt-BR)
+//     e removemos todos — resultando num inteiro.
+// Exemplos:
+//   "34"            → 34
+//   "34.000"        → 34000
+//   "34,50"         → 34.5
+//   "34.000,50"     → 34000.50
+//   "1.234.567,89"  → 1234567.89
+//   "R$ 2.654,95"   → 2654.95
+export function parseBRL(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
+
+  const str = String(raw).trim();
+  if (!str) return null;
+
+  // Remove tudo que não é dígito, ponto, vírgula ou sinal negativo
+  const limpo = str.replace(/[^\d.,-]/g, "");
+  if (!limpo) return null;
+
+  const temVirgula = limpo.includes(",");
+  const temPonto = limpo.includes(".");
+
+  let normalizado: string;
+  if (temVirgula) {
+    // Vírgula é decimal; pontos são milhar → remover
+    normalizado = limpo.replace(/\./g, "").replace(",", ".");
+  } else if (temPonto) {
+    // Só ponto: assumimos milhar (padrão BR) → remover todos
+    normalizado = limpo.replace(/\./g, "");
+  } else {
+    normalizado = limpo;
+  }
+
+  const n = Number(normalizado);
+  return Number.isFinite(n) ? n : null;
+}
+
 // Formata telefone BR normalizado (ex 5562991357861) -> (62) 99135-7861
 export function formatTelefone(tel: string | null | undefined): string {
   if (!tel) return "—";
