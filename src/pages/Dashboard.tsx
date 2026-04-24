@@ -14,6 +14,7 @@ import { FiltrosBar } from "@/components/dashboard/FiltrosBar";
 import { KpiCards } from "@/components/dashboard/KpiCards";
 import { DispararDialog } from "@/components/dashboard/DispararDialog";
 import { EditarDevedorDialog } from "@/components/dashboard/EditarDevedorDialog";
+import { ReenviarMensagemDialog } from "@/components/dashboard/ReenviarMensagemDialog";
 import { RemoverDevedorDialog } from "@/components/dashboard/RemoverDevedorDialog";
 import { AdicionarDevedorDialog } from "@/components/adicionar-devedor/AdicionarDevedorDialog";
 import { useDevedoresFilters } from "@/hooks/useDevedoresFilters";
@@ -41,6 +42,9 @@ export function Dashboard() {
   const [adicionarOpen, setAdicionarOpen] = useState(false);
   const [dispararOpen, setDispararOpen] = useState(false);
   const [editandoDevedor, setEditandoDevedor] = useState<Devedor | null>(null);
+  const [reenviandoDevedor, setReenviandoDevedor] = useState<Devedor | null>(
+    null
+  );
   const [removendoDevedor, setRemovendoDevedor] = useState<Devedor | null>(
     null
   );
@@ -161,6 +165,12 @@ export function Dashboard() {
         devedor={editandoDevedor}
       />
 
+      <ReenviarMensagemDialog
+        open={reenviandoDevedor !== null}
+        onOpenChange={(open) => !open && setReenviandoDevedor(null)}
+        devedor={reenviandoDevedor}
+      />
+
       <RemoverDevedorDialog
         open={removendoDevedor !== null}
         onOpenChange={(open) => !open && setRemovendoDevedor(null)}
@@ -194,6 +204,7 @@ export function Dashboard() {
             onToggleSelecionado={toggle}
             onTogglePaginaAtual={togglePagina}
             onEditarDevedor={setEditandoDevedor}
+            onReenviarMensagem={setReenviandoDevedor}
             onRemoverDevedor={setRemovendoDevedor}
           />
         </CardContent>

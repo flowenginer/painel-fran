@@ -1,5 +1,5 @@
-// Dropdown de ações por devedor: editar, alterar status, remover.
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+// Dropdown de ações por devedor: editar, alterar status, reenviar msg, remover.
+import { MoreHorizontal, Pencil, Send, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -30,10 +30,16 @@ const STATUS_OPTIONS: { value: StatusNegociacao; label: string }[] = [
 interface Props {
   devedor: Devedor;
   onEditar: (d: Devedor) => void;
+  onReenviar: (d: Devedor) => void;
   onRemover: (d: Devedor) => void;
 }
 
-export function DevedorAcoes({ devedor, onEditar, onRemover }: Props) {
+export function DevedorAcoes({
+  devedor,
+  onEditar,
+  onReenviar,
+  onRemover,
+}: Props) {
   const { mutateAsync: atualizarStatus, isPending } = useAtualizarStatus();
   const { toast } = useToast();
 
@@ -55,6 +61,10 @@ export function DevedorAcoes({ devedor, onEditar, onRemover }: Props) {
     }
   }
 
+  // Reenvio bloqueado quando acordo já foi fechado, pra não atrapalhar
+  // negociações concluídas.
+  const podeReenviar = devedor.status_negociacao !== "acordo_aceito";
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -68,12 +78,19 @@ export function DevedorAcoes({ devedor, onEditar, onRemover }: Props) {
           <MoreHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
+      <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>Ações</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => onEditar(devedor)}>
           <Pencil className="mr-2 h-4 w-4" />
           Editar devedor
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={() => onReenviar(devedor)}
+          disabled={!podeReenviar}
+        >
+          <Send className="mr-2 h-4 w-4" />
+          Reenviar 1ª mensagem
         </DropdownMenuItem>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>Alterar status</DropdownMenuSubTrigger>
