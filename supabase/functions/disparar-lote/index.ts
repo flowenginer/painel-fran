@@ -24,21 +24,55 @@ interface RequestBody {
   reenviar?: boolean;
 }
 
+// Representa o devedor lido da tabela. Campos opcionais incluídos para
+// que o webhook receba o registro completo — útil para a Fran ter
+// contexto sem precisar fazer outra consulta.
 interface DevedorRow {
   id: number;
+  // Identificação
+  id_devedor: string | null;
+  cod_credor: string | null;
+  cod_devedor: string | null;
   cpf: string | null;
   nome_devedor: string;
   primeiro_nome: string | null;
   tratamento: string | null;
+  email: string | null;
+  // Telefones
   telefone: string;
+  telefone_2: string | null;
+  telefone_3: string | null;
+  // Endereço
+  endereco: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  estado: string | null;
+  cep: string | null;
+  // Instituição/aluno
   instituicao: string;
   nome_aluno: string | null;
+  // Dívida
+  valor_original: number | null;
   valor_atualizado: number | null;
+  qtd_parcelas_aberto: number | null;
   ano_inicial_dividas: number | null;
   ano_final_dividas: number | null;
-  qtd_parcelas_aberto: number | null;
   acordo_anterior: string | null;
+  // Notas
+  dado_adicional: string | null;
+  observacoes_negociacao: string | null;
+  // Negociação
   status_negociacao: string | null;
+  campanha: string | null;
+  data_primeiro_disparo: string | null;
+  data_ultimo_contato: string | null;
+  tentativas_contato: number | null;
+  // Acordo (preenchido pela Fran via tools quando aceita)
+  acordo_valor_total: number | null;
+  acordo_valor_entrada: number | null;
+  acordo_num_parcelas: number | null;
+  acordo_valor_parcela: number | null;
+  acordo_data_aceite: string | null;
 }
 
 function validarBody(raw: unknown): RequestBody {
@@ -95,20 +129,63 @@ function dentroDoHorario(inicio: string, fim: string): boolean {
 }
 
 function montarPayloadDevedor(d: DevedorRow) {
+  // Lista os telefones cadastrados em ordem, sem nulos/duplicados,
+  // facilitando iteração no n8n caso o primário falhe.
+  const telefones = [d.telefone, d.telefone_2, d.telefone_3]
+    .filter((t): t is string => Boolean(t && t.trim()))
+    .filter((t, i, arr) => arr.indexOf(t) === i);
+
   return {
+    // Mantém devedor_id para compatibilidade com workflows n8n
+    // existentes; id é o mesmo valor.
     devedor_id: d.id,
+    id: d.id,
+    // Identificação Cedrus
+    id_devedor: d.id_devedor,
+    cod_credor: d.cod_credor,
+    cod_devedor: d.cod_devedor,
     cpf: d.cpf,
+    // Pessoa
     nome_devedor: d.nome_devedor,
     primeiro_nome: d.primeiro_nome,
     tratamento: d.tratamento,
+    email: d.email,
+    // Telefones (primário + array completo)
     telefone: d.telefone,
+    telefone_2: d.telefone_2,
+    telefone_3: d.telefone_3,
+    telefones,
+    // Endereço
+    endereco: d.endereco,
+    bairro: d.bairro,
+    cidade: d.cidade,
+    estado: d.estado,
+    cep: d.cep,
+    // Instituição/aluno
     instituicao: d.instituicao,
     nome_aluno: d.nome_aluno,
+    // Dívida
+    valor_original: d.valor_original,
     valor_atualizado: d.valor_atualizado,
+    qtd_parcelas_aberto: d.qtd_parcelas_aberto,
     ano_inicial_dividas: d.ano_inicial_dividas,
     ano_final_dividas: d.ano_final_dividas,
-    qtd_parcelas_aberto: d.qtd_parcelas_aberto,
     acordo_anterior: d.acordo_anterior,
+    // Notas
+    dado_adicional: d.dado_adicional,
+    observacoes_negociacao: d.observacoes_negociacao,
+    // Negociação
+    status_negociacao: d.status_negociacao,
+    campanha: d.campanha,
+    data_primeiro_disparo: d.data_primeiro_disparo,
+    data_ultimo_contato: d.data_ultimo_contato,
+    tentativas_contato: d.tentativas_contato,
+    // Acordo (caso já tenha um aceito anteriormente)
+    acordo_valor_total: d.acordo_valor_total,
+    acordo_valor_entrada: d.acordo_valor_entrada,
+    acordo_num_parcelas: d.acordo_num_parcelas,
+    acordo_valor_parcela: d.acordo_valor_parcela,
+    acordo_data_aceite: d.acordo_data_aceite,
   };
 }
 
@@ -216,7 +293,9 @@ Deno.serve(async (req: Request) => {
     const devResp = await rest(
       env,
       "GET",
-      `/fran_devedores?id=in.(${ids})&select=id,cpf,nome_devedor,primeiro_nome,tratamento,telefone,instituicao,nome_aluno,valor_atualizado,ano_inicial_dividas,ano_final_dividas,qtd_parcelas_aberto,acordo_anterior,status_negociacao`
+      // select=* para enviar o registro completo no payload do n8n.
+      // Reduz round-trips e dá à Fran o contexto inteiro do lead.
+      `/fran_devedores?id=in.(${ids})&select=*`
     );
     if (!devResp.ok) {
       throw new Error(
