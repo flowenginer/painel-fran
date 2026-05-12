@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Plus, Send } from "lucide-react";
+import { Plus, Send, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +17,7 @@ import { EditarDevedorDialog } from "@/components/dashboard/EditarDevedorDialog"
 import { ReenviarMensagemDialog } from "@/components/dashboard/ReenviarMensagemDialog";
 import { RemoverDevedorDialog } from "@/components/dashboard/RemoverDevedorDialog";
 import { AdicionarDevedorDialog } from "@/components/adicionar-devedor/AdicionarDevedorDialog";
+import { ImportarDevedoresCsvDialog } from "@/components/adicionar-devedor/ImportarDevedoresCsvDialog";
 import { useDevedoresFilters } from "@/hooks/useDevedoresFilters";
 import { useDevedoresRealtime } from "@/hooks/useDevedoresRealtime";
 import { useSelecaoDevedores } from "@/hooks/useSelecaoDevedores";
@@ -40,6 +41,7 @@ export function Dashboard() {
   const { selecionados, toggle, togglePagina, limpar } = useSelecaoDevedores();
 
   const [adicionarOpen, setAdicionarOpen] = useState(false);
+  const [importarCsvOpen, setImportarCsvOpen] = useState(false);
   const [dispararOpen, setDispararOpen] = useState(false);
   const [editandoDevedor, setEditandoDevedor] = useState<Devedor | null>(null);
   const [reenviandoDevedor, setReenviandoDevedor] = useState<Devedor | null>(
@@ -123,6 +125,14 @@ export function Dashboard() {
           <Button
             variant="outline"
             size="sm"
+            onClick={() => setImportarCsvOpen(true)}
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            Importar CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setAdicionarOpen(true)}
           >
             <Plus className="mr-2 h-4 w-4" />
@@ -150,6 +160,11 @@ export function Dashboard() {
       <AdicionarDevedorDialog
         open={adicionarOpen}
         onOpenChange={setAdicionarOpen}
+      />
+
+      <ImportarDevedoresCsvDialog
+        open={importarCsvOpen}
+        onOpenChange={setImportarCsvOpen}
       />
 
       <DispararDialog
