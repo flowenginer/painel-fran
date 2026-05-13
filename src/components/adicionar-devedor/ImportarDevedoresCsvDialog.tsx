@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   FileSpreadsheet,
   Loader2,
+  RotateCw,
   Search,
   Upload,
   XCircle,
@@ -85,6 +86,9 @@ export function ImportarDevedoresCsvDialog({ open, onOpenChange }: Props) {
   const [resultadosCedrus, setResultadosCedrus] = useState<
     ResultadoBuscaIndividual[]
   >([]);
+  // Re-tentativa dos itens que falharam com status="erro"
+  const [retentando, setRetentando] = useState(false);
+  const [progressoRetry, setProgressoRetry] = useState({ done: 0, total: 0 });
 
   // Revisão (após Cedrus)
   const [candidatos, setCandidatos] = useState<CandidatoDevedor[]>([]);
@@ -109,6 +113,8 @@ export function ImportarDevedoresCsvDialog({ open, onOpenChange }: Props) {
     setInvalidosCsv([]);
     setErroLeitura(null);
     setProgresso({ done: 0, total: 0 });
+    setProgressoRetry({ done: 0, total: 0 });
+    setRetentando(false);
     setResultadosCedrus([]);
     setCandidatos([]);
     setInvalidosTransform([]);
@@ -116,6 +122,29 @@ export function ImportarDevedoresCsvDialog({ open, onOpenChange }: Props) {
     abortRef.current?.abort();
     abortRef.current = null;
     if (inputRef.current) inputRef.current.value = "";
+  }
+
+  // Recalcula candidatos + bloqueados a partir do array completo de
+  // resultados da Cedrus. Usado depois da busca inicial e depois do retry.
+  function recalcularRevisao(resultados: ResultadoBuscaIndividual[]) {
+    const encontradosComCsv = resultados
+      .map((r, idx) => ({ r, csv: codigos[idx] }))
+      .filter(
+        (x): x is { r: ResultadoBuscaIndividual; csv: CodigoExtraido } =>
+          x.r.status === "encontrado" && Boolean(x.r.devedor)
+      )
+      .map(({ r, csv }) => ({
+        cod_credor: csv.cod_credor,
+        cod_devedor: csv.cod_devedor,
+        categoria_csv: csv.categoria_csv,
+        devedor: r.devedor!,
+      }));
+    const transform = transformarRespostasCedrus(
+      encontradosComCsv,
+      instituicoes ?? []
+    );
+    setCandidatos(transform.validos);
+    setInvalidosTransform(transform.invalidos);
   }
 
   function handleClose(nextOpen: boolean) {
@@ -173,27 +202,7 @@ export function ImportarDevedoresCsvDialog({ open, onOpenChange }: Props) {
       }
 
       setResultadosCedrus(resultados);
-
-      // Transforma os encontrados em candidatos
-      const encontradosComCsv = resultados
-        .map((r, idx) => ({ r, csv: codigos[idx] }))
-        .filter(
-          (x): x is { r: ResultadoBuscaIndividual; csv: CodigoExtraido } =>
-            x.r.status === "encontrado" && Boolean(x.r.devedor)
-        )
-        .map(({ r, csv }) => ({
-          cod_credor: csv.cod_credor,
-          cod_devedor: csv.cod_devedor,
-          categoria_csv: csv.categoria_csv,
-          devedor: r.devedor!,
-        }));
-
-      const transform = transformarRespostasCedrus(
-        encontradosComCsv,
-        instituicoes ?? []
-      );
-      setCandidatos(transform.validos);
-      setInvalidosTransform(transform.invalidos);
+      recalcularRevisao(resultados);
       setEtapa("revisao");
     } catch (err) {
       toast({
@@ -207,6 +216,67 @@ export function ImportarDevedoresCsvDialog({ open, onOpenChange }: Props) {
 
   function cancelarBusca() {
     abortRef.current?.abort();
+  }
+
+  // Re-tenta apenas os itens cujo status atual é "erro" (falhas de rede,
+  // timeouts da Cedrus, 502/504). Não toca em "nao_encontrado" — esses
+  // a Cedrus retornou explicitamente que não existem.
+  async function tentarNovamenteErros() {
+    const indicesErro = resultadosCedrus
+      .map((r, idx) => (r.status === "erro" ? idx : -1))
+      .filter((i) => i >= 0);
+    if (indicesErro.length === 0) return;
+
+    setRetentando(true);
+    setProgressoRetry({ done: 0, total: indicesErro.length });
+
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    try {
+      const novos = await buscarVariosDoCedrus(
+        indicesErro.map((i) => ({
+          cod_credor: codigos[i].cod_credor,
+          cod_devedor: codigos[i].cod_devedor,
+          linha: codigos[i].linha,
+        })),
+        {
+          concorrencia: CONCORRENCIA_PADRAO,
+          signal: ctrl.signal,
+          onProgress: (done, total) =>
+            setProgressoRetry({ done, total }),
+        }
+      );
+
+      // Mescla os novos resultados nos índices originais
+      const merged = resultadosCedrus.slice();
+      indicesErro.forEach((idxOriginal, k) => {
+        merged[idxOriginal] = novos[k];
+      });
+
+      setResultadosCedrus(merged);
+      recalcularRevisao(merged);
+
+      const aindaErros = novos.filter((r) => r.status === "erro").length;
+      const recuperados = novos.length - aindaErros;
+      toast({
+        variant: recuperados > 0 ? "success" : "destructive",
+        title: "Re-tentativa concluída",
+        description:
+          aindaErros === 0
+            ? `${recuperados} recuperados, sem novos erros`
+            : `${recuperados} recuperados, ${aindaErros} ainda com erro`,
+      });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Erro durante re-tentativa",
+        description:
+          err instanceof Error ? err.message : "Erro desconhecido",
+      });
+    } finally {
+      setRetentando(false);
+    }
   }
 
   async function confirmarImportacao() {
@@ -384,6 +454,51 @@ export function ImportarDevedoresCsvDialog({ open, onOpenChange }: Props) {
                   </span>
                 )}
               </div>
+
+              {/* Botão de re-tentativa + barra de progresso */}
+              {statsBusca.erros > 0 && !retentando && (
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+                  <p className="text-xs text-muted-foreground">
+                    Erros costumam ser transientes (timeout, 502). Vale
+                    tentar de novo.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void tentarNovamenteErros()}
+                  >
+                    <RotateCw className="mr-2 h-4 w-4" />
+                    Tentar novamente os {statsBusca.erros} erros
+                  </Button>
+                </div>
+              )}
+
+              {retentando && (
+                <div className="mt-3 space-y-2 border-t pt-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Re-tentando erros...
+                    </span>
+                    <span className="tabular-nums">
+                      {progressoRetry.done}/{progressoRetry.total}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{
+                        width: `${
+                          progressoRetry.total > 0
+                            ? (progressoRetry.done / progressoRetry.total) *
+                              100
+                            : 0
+                        }%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="rounded-md border bg-muted/20 p-3 text-sm">
@@ -511,7 +626,9 @@ export function ImportarDevedoresCsvDialog({ open, onOpenChange }: Props) {
               </Button>
               <Button
                 onClick={confirmarImportacao}
-                disabled={candidatos.length === 0 || importando}
+                disabled={
+                  candidatos.length === 0 || importando || retentando
+                }
               >
                 {importando ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
