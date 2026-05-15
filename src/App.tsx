@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { Login } from "@/pages/Login";
 import { Dashboard } from "@/pages/Dashboard";
 import { Instituicoes } from "@/pages/Instituicoes";
+import { Whatsapp } from "@/pages/Whatsapp";
 import { Configuracoes } from "@/pages/Configuracoes";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -25,6 +26,7 @@ function App() {
         >
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/instituicoes" element={<Instituicoes />} />
+          <Route path="/whatsapp" element={<Whatsapp />} />
           <Route path="/configuracoes" element={<Configuracoes />} />
         </Route>
 

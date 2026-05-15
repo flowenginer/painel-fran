@@ -20,10 +20,53 @@ supabase/
 │   │   ├── alunos.ts                    # extração de nomes + acordo anterior
 │   │   ├── transform.ts                 # devedor bruto → DevedorNormalizado
 │   │   └── deno.json                    # config do Deno
-│   └── disparar-lote/
-│       ├── index.ts                     # valida limites + POST ao webhook n8n
+│   ├── disparar-lote/
+│   │   ├── index.ts                     # valida limites + POST ao webhook n8n
+│   │   └── deno.json
+│   └── uazapi-proxy/
+│       ├── index.ts                     # proxy para o webhook UAZAPI no n8n
 │       └── deno.json
 └── README.md                            # este arquivo
+```
+
+## Deploy da Edge Function `uazapi-proxy`
+
+Proxy que repassa chamadas do painel para um workflow do n8n da Chelsan
+("Painel Fran ⇄ UAZAPI"). A indireção é necessária porque a UAZAPI
+restringe acesso por IP — o n8n da Chelsan já está na allowlist, o
+Supabase Edge não.
+
+```bash
+supabase functions deploy uazapi-proxy
+```
+
+Pré-requisitos em `fran_config`:
+- `uazapi_webhook_url` — URL do nó Webhook do workflow no n8n
+- `uazapi_webhook_secret` — valor que o nó IF do workflow valida em
+  `X-Painel-Secret`
+
+Contrato:
+```json
+// Request
+POST /functions/v1/uazapi-proxy
+Authorization: Bearer <user-jwt>
+{ "acao": "status" | "connect" | "disconnect" }
+
+// Response (já desencapsulado do array do n8n)
+{
+  "ok": true,
+  "estado": "connected" | "connecting" | "disconnected",
+  "nome_instancia": "qi06bK",
+  "telefone": "556291507974",
+  "nome_perfil": "Stival Advogados",
+  "foto_perfil": "https://...",
+  "qrcode": "data:image/png;base64,..." | null,
+  "paircode": null,
+  "ultima_desconexao": "...",
+  "motivo_desconexao": "...",
+  "current_presence": "available" | "unavailable",
+  "is_business": true
+}
 ```
 
 ## Deploy da Edge Function `cedrus-buscar`
