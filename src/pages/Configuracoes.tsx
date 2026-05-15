@@ -24,6 +24,8 @@ interface FormState {
   cedrus_apikey: string;
   cedrus_url_base: string;
   n8n_webhook_url: string;
+  uazapi_webhook_url: string;
+  uazapi_webhook_secret: string;
   limite_diario_disparos: string;
   horario_disparo_inicio: string;
   horario_disparo_fim: string;
@@ -33,6 +35,8 @@ const DEFAULTS: FormState = {
   cedrus_apikey: "",
   cedrus_url_base: "https://api.sistemadecobranca.com.br:3001/v1",
   n8n_webhook_url: "",
+  uazapi_webhook_url: "",
+  uazapi_webhook_secret: "",
   limite_diario_disparos: "40",
   horario_disparo_inicio: "08:00",
   horario_disparo_fim: "20:00",
@@ -55,6 +59,8 @@ export function Configuracoes() {
         cedrus_apikey: data.cedrus_apikey ?? "",
         cedrus_url_base: data.cedrus_url_base ?? DEFAULTS.cedrus_url_base,
         n8n_webhook_url: data.n8n_webhook_url ?? "",
+        uazapi_webhook_url: data.uazapi_webhook_url ?? "",
+        uazapi_webhook_secret: data.uazapi_webhook_secret ?? "",
         limite_diario_disparos:
           data.limite_diario_disparos ?? DEFAULTS.limite_diario_disparos,
         horario_disparo_inicio:
@@ -97,6 +103,14 @@ export function Configuracoes() {
         { chave: "cedrus_apikey", valor: form.cedrus_apikey.trim() },
         { chave: "cedrus_url_base", valor: form.cedrus_url_base.trim() },
         { chave: "n8n_webhook_url", valor: form.n8n_webhook_url.trim() },
+        {
+          chave: "uazapi_webhook_url",
+          valor: form.uazapi_webhook_url.trim(),
+        },
+        {
+          chave: "uazapi_webhook_secret",
+          valor: form.uazapi_webhook_secret.trim(),
+        },
         {
           chave: "limite_diario_disparos",
           valor: String(limite),
@@ -289,6 +303,44 @@ export function Configuracoes() {
             <p className="text-xs text-muted-foreground">
               Envia POST com &#123; teste: true &#125; para verificar
               acessibilidade.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>WhatsApp (UAZAPI via n8n)</CardTitle>
+          <CardDescription>
+            Webhook do workflow no n8n que proxia o acesso à UAZAPI. Use a
+            mesma URL gerada pelo nó Webhook do workflow "Painel Fran ⇄
+            UAZAPI" e o mesmo SECRET configurado lá.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1">
+            <Label className="text-xs">URL do webhook UAZAPI no n8n</Label>
+            <Input
+              value={form.uazapi_webhook_url}
+              onChange={(e) => set("uazapi_webhook_url", e.target.value)}
+              placeholder="https://nwh.chelsan.com.br/webhook/painel-fran-uazapi"
+              disabled={isLoading}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Secret (X-Painel-Secret)</Label>
+            <Input
+              type="password"
+              value={form.uazapi_webhook_secret}
+              onChange={(e) =>
+                set("uazapi_webhook_secret", e.target.value)
+              }
+              placeholder="Mesmo valor configurado no n8n"
+              disabled={isLoading}
+            />
+            <p className="text-xs text-muted-foreground">
+              Deve ser igual ao valor verificado pelo nó "Validar Secret"
+              do workflow. Trate como senha — não compartilhe.
             </p>
           </div>
         </CardContent>
