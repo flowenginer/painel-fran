@@ -47,8 +47,8 @@ export function ListaConversas({
   }, [conversas, busca]);
 
   return (
-    <div className="flex h-full flex-col border-r bg-muted/10">
-      <div className="border-b p-3">
+    <div className="flex h-full min-h-0 flex-col border-r bg-muted/10">
+      <div className="shrink-0 border-b p-3">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -58,9 +58,15 @@ export function ListaConversas({
             className="h-9 pl-8"
           />
         </div>
+        {!isLoading && (
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            {filtradas.length} conversa{filtradas.length !== 1 ? "s" : ""}
+            {busca && ` · de ${conversas.length} totais`}
+          </p>
+        )}
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {isLoading && (
           <div className="space-y-1 p-2">
             {Array.from({ length: 8 }).map((_, i) => (

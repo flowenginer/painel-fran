@@ -45,14 +45,18 @@ export function Conversas() {
       </div>
 
       {/* Layout estilo WhatsApp Web: lista | thread */}
-      <div className="grid h-[calc(100vh-220px)] min-h-[500px] grid-cols-1 overflow-hidden rounded-md border md:grid-cols-[340px_1fr]">
-        <ListaConversas
-          conversas={conversas}
-          selecionada={selecionada}
-          onSelecionar={setSelecionada}
-          isLoading={isLoading}
-        />
-        <ThreadMensagens conversa={ativa ?? null} />
+      <div className="grid h-[calc(100vh-220px)] min-h-[500px] grid-cols-1 grid-rows-[1fr] overflow-hidden rounded-md border md:grid-cols-[340px_1fr]">
+        <div className="min-h-0 overflow-hidden">
+          <ListaConversas
+            conversas={conversas}
+            selecionada={selecionada}
+            onSelecionar={setSelecionada}
+            isLoading={isLoading}
+          />
+        </div>
+        <div className="min-h-0 overflow-hidden">
+          <ThreadMensagens conversa={ativa ?? null} />
+        </div>
       </div>
     </div>
   );
