@@ -57,6 +57,12 @@ export interface Devedor {
   acordo_anterior: string | null;
   dado_adicional: string | null;
   status_negociacao: StatusNegociacao | null;
+  /**
+   * Flag administrativa de bloqueio de interação com a IA.
+   * "Block IA" → workflows da Fran devem ignorar este devedor.
+   * null/outros → comportamento normal.
+   */
+  status: string | null;
   motivo_escalonamento: string | null;
   observacoes_negociacao: string | null;
   acordo_valor_total: number | null;

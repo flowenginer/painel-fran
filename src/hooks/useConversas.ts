@@ -37,7 +37,7 @@ async function fetchConversas(): Promise<ConversaItem[]> {
       supabase
         .from("fran_devedores")
         .select(
-          "id, cpf, nome_devedor, primeiro_nome, telefone, telefone_2, telefone_3, instituicao, status_negociacao, data_ultimo_contato, tentativas_contato, created_at, updated_at"
+          "id, cpf, nome_devedor, primeiro_nome, telefone, telefone_2, telefone_3, instituicao, status_negociacao, status, data_ultimo_contato, tentativas_contato, created_at, updated_at"
         )
         .order("updated_at", { ascending: false, nullsFirst: false })
     ),
