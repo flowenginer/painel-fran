@@ -1,0 +1,142 @@
+// Lista de conversas: todos os devedores + última mensagem (se houver).
+// - Ordena: quem tem mensagem mais recente em cima
+// - Devedores sem mensagem aparecem no final (ordem alfabética)
+// - Faz match por telefone normalizado (só dígitos) com session_id da fran_memory
+import { useQuery } from "@tanstack/react-query";
+
+import { supabase } from "@/lib/supabase";
+import {
+  ehMensagemVisivel,
+  normalizarSessionId,
+  parsearMensagem,
+  type FranMemoryRow,
+  type MensagemParsed,
+} from "@/lib/conversas";
+import type { Devedor } from "@/lib/types";
+
+export interface ConversaItem {
+  /** Devedor correspondente — pode ser null quando o session_id não bate com nenhum cadastrado. */
+  devedor: Devedor | null;
+  /** Telefone normalizado (só dígitos). Chave canônica da conversa. */
+  telefone_normalizado: string;
+  /** session_id original mais recente. Útil para exibir como veio. */
+  session_id_exibicao: string;
+  /** Última mensagem visível dessa conversa. */
+  ultima_mensagem: MensagemParsed | null;
+  /** Total de mensagens da sessão (independente de visíveis). */
+  total_mensagens: number;
+}
+
+const LIMITE_MENSAGENS = 5000;
+
+async function fetchConversas(): Promise<ConversaItem[]> {
+  // 1. Devedores (todos) e mensagens recentes em paralelo.
+  const [devedoresRes, mensagensRes] = await Promise.all([
+    supabase
+      .from("fran_devedores")
+      .select(
+        "id, cpf, nome_devedor, primeiro_nome, telefone, telefone_2, telefone_3, instituicao, status_negociacao, data_ultimo_contato, tentativas_contato, created_at, updated_at"
+      )
+      .order("updated_at", { ascending: false, nullsFirst: false }),
+    supabase
+      .from("fran_memory")
+      .select("id, session_id, message")
+      .order("id", { ascending: false })
+      .limit(LIMITE_MENSAGENS),
+  ]);
+
+  if (devedoresRes.error) throw devedoresRes.error;
+  if (mensagensRes.error) throw mensagensRes.error;
+
+  const devedores = (devedoresRes.data ?? []) as Devedor[];
+  const mensagensRaw = (mensagensRes.data ?? []) as FranMemoryRow[];
+
+  // 2. Agrupa mensagens por telefone normalizado.
+  // Como veio em ordem DESC pelo id, a primeira mensagem que encontrarmos
+  // pra cada telefone é a mais recente.
+  type Grupo = {
+    telefone: string;
+    session_id_exibicao: string;
+    ultima_visivel: MensagemParsed | null;
+    total: number;
+  };
+  const grupos = new Map<string, Grupo>();
+  for (const raw of mensagensRaw) {
+    const m = parsearMensagem(raw);
+    const chave = m.session_id_normalizado;
+    if (!chave) continue;
+    let grupo = grupos.get(chave);
+    if (!grupo) {
+      grupo = {
+        telefone: chave,
+        session_id_exibicao: m.session_id,
+        ultima_visivel: null,
+        total: 0,
+      };
+      grupos.set(chave, grupo);
+    }
+    grupo.total += 1;
+    if (!grupo.ultima_visivel && ehMensagemVisivel(m)) {
+      grupo.ultima_visivel = m;
+    }
+  }
+
+  // 3. Indexa devedores por todos os seus telefones (1, 2 e 3).
+  const devedorPorTelefone = new Map<string, Devedor>();
+  for (const d of devedores) {
+    for (const tel of [d.telefone, d.telefone_2, d.telefone_3]) {
+      const norm = normalizarSessionId(tel);
+      if (norm && !devedorPorTelefone.has(norm)) {
+        devedorPorTelefone.set(norm, d);
+      }
+    }
+  }
+
+  // 4. Monta a lista. Primeiro os com mensagens (ordenados por id desc),
+  // depois os sem mensagens (alfabético).
+  const usados = new Set<number>();
+  const comMsg: ConversaItem[] = [];
+  // Reordena grupos pela id da última mensagem
+  const gruposOrdenados = Array.from(grupos.values()).sort((a, b) => {
+    const idA = a.ultima_visivel?.id ?? 0;
+    const idB = b.ultima_visivel?.id ?? 0;
+    return idB - idA;
+  });
+
+  for (const g of gruposOrdenados) {
+    const devedor = devedorPorTelefone.get(g.telefone) ?? null;
+    if (devedor) usados.add(devedor.id);
+    comMsg.push({
+      devedor,
+      telefone_normalizado: g.telefone,
+      session_id_exibicao: g.session_id_exibicao,
+      ultima_mensagem: g.ultima_visivel,
+      total_mensagens: g.total,
+    });
+  }
+
+  const semMsg: ConversaItem[] = devedores
+    .filter((d) => !usados.has(d.id))
+    .map((d) => ({
+      devedor: d,
+      telefone_normalizado: normalizarSessionId(d.telefone),
+      session_id_exibicao: d.telefone ?? "",
+      ultima_mensagem: null,
+      total_mensagens: 0,
+    }))
+    .sort((a, b) =>
+      (a.devedor?.nome_devedor ?? "").localeCompare(
+        b.devedor?.nome_devedor ?? ""
+      )
+    );
+
+  return [...comMsg, ...semMsg];
+}
+
+export function useConversas() {
+  return useQuery<ConversaItem[]>({
+    queryKey: ["conversas"],
+    queryFn: fetchConversas,
+    staleTime: 10_000,
+  });
+}
