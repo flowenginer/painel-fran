@@ -107,3 +107,35 @@ export function useAtualizarStatus() {
     },
   });
 }
+
+/** Valor canônico do campo `status` para bloquear interação com a IA. */
+export const STATUS_BLOCK_IA = "Block IA";
+
+async function alternarBlockIA(args: {
+  id: number;
+  bloquear: boolean;
+}): Promise<Devedor> {
+  const { data, error } = await supabase
+    .from("fran_devedores")
+    .update({
+      status: args.bloquear ? STATUS_BLOCK_IA : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", args.id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Devedor;
+}
+
+export function useToggleBlockIA() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: alternarBlockIA,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["devedores"] });
+      qc.invalidateQueries({ queryKey: ["conversas"] });
+      qc.invalidateQueries({ queryKey: ["kpis"] });
+    },
+  });
+}

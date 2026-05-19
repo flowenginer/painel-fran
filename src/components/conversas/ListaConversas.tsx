@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Ban, Search } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { previewContent } from "@/lib/conversas";
 import { formatTelefone } from "@/lib/formatters";
+import { STATUS_BLOCK_IA } from "@/hooks/useDevedorMutations";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import type { ConversaItem } from "@/hooks/useConversas";
 
@@ -124,11 +125,20 @@ export function ListaConversas({
                         ? formatTelefone(c.devedor.telefone)
                         : `+${c.telefone_normalizado}`}
                     </p>
-                    <div className="mt-1 flex items-center gap-2">
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       {c.devedor?.status_negociacao && (
                         <StatusBadge
                           status={c.devedor.status_negociacao}
                         />
+                      )}
+                      {c.devedor?.status === STATUS_BLOCK_IA && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive"
+                          title="IA bloqueada para este devedor"
+                        >
+                          <Ban className="h-3 w-3" />
+                          IA bloqueada
+                        </span>
                       )}
                     </div>
                     {c.ultima_mensagem ? (

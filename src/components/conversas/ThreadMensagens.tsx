@@ -1,19 +1,36 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
+  Ban,
   Inbox,
+  Loader2,
   Lock,
   MessageSquare,
   Phone,
+  ShieldCheck,
 } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   filtrarVisiveis,
   useMensagensConversa,
 } from "@/hooks/useMensagensConversa";
+import {
+  STATUS_BLOCK_IA,
+  useToggleBlockIA,
+} from "@/hooks/useDevedorMutations";
+import { useToast } from "@/hooks/use-toast";
 import { formatTelefone } from "@/lib/formatters";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { MensagemBubble } from "./MensagemBubble";
@@ -41,6 +58,37 @@ export function ThreadMensagens({ conversa }: Props) {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const visiveis = filtrarVisiveis(data ?? []);
+
+  const [confirmandoToggle, setConfirmandoToggle] = useState(false);
+  const { mutateAsync: toggleBlock, isPending: alterandoBlock } =
+    useToggleBlockIA();
+  const { toast } = useToast();
+
+  const iaBloqueada = conversa?.devedor?.status === STATUS_BLOCK_IA;
+
+  async function confirmarToggle() {
+    if (!conversa?.devedor) return;
+    try {
+      await toggleBlock({
+        id: conversa.devedor.id,
+        bloquear: !iaBloqueada,
+      });
+      toast({
+        variant: "success",
+        title: iaBloqueada ? "IA desbloqueada" : "IA bloqueada",
+        description: iaBloqueada
+          ? `${conversa.devedor.nome_devedor} voltará a receber respostas da Fran.`
+          : `${conversa.devedor.nome_devedor} não receberá mais respostas automáticas.`,
+      });
+      setConfirmandoToggle(false);
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao atualizar",
+        description: err instanceof Error ? err.message : "Erro desconhecido",
+      });
+    }
+  }
 
   // Auto-scroll para o final ao receber mensagens novas
   useEffect(() => {
@@ -87,14 +135,45 @@ export function ThreadMensagens({ conversa }: Props) {
             )}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           {conversa.devedor?.status_negociacao && (
             <StatusBadge status={conversa.devedor.status_negociacao} />
+          )}
+          {iaBloqueada && (
+            <Badge
+              variant="outline"
+              className="gap-1 border-destructive/40 bg-destructive/10 text-[10px] text-destructive"
+            >
+              <Ban className="h-3 w-3" />
+              IA bloqueada
+            </Badge>
+          )}
+          {conversa.devedor && (
+            <Button
+              variant={iaBloqueada ? "outline" : "destructive"}
+              size="sm"
+              onClick={() => setConfirmandoToggle(true)}
+              disabled={alterandoBlock}
+              title={
+                iaBloqueada
+                  ? "Permite que a Fran volte a responder este devedor"
+                  : "Impede a Fran de responder este devedor"
+              }
+            >
+              {alterandoBlock ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : iaBloqueada ? (
+                <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+              ) : (
+                <Ban className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              {iaBloqueada ? "Desbloquear IA" : "Bloquear IA"}
+            </Button>
           )}
           <Badge
             variant="outline"
             className="hidden gap-1 text-[10px] sm:inline-flex"
-            title="Esta visualização é somente leitura"
+            title="Esta visualização é somente leitura — não há envio de mensagens daqui"
           >
             <Lock className="h-3 w-3" />
             Somente leitura
@@ -149,6 +228,67 @@ export function ThreadMensagens({ conversa }: Props) {
         <Lock className="h-3 w-3" />
         <span>Histórico em tempo real · sem envio de mensagens</span>
       </div>
+
+      {/* Modal de confirmação Bloquear/Desbloquear IA */}
+      <Dialog open={confirmandoToggle} onOpenChange={setConfirmandoToggle}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {iaBloqueada
+                ? "Desbloquear IA para este devedor?"
+                : "Bloquear IA para este devedor?"}
+            </DialogTitle>
+            <DialogDescription>
+              {iaBloqueada ? (
+                <>
+                  A Fran voltará a responder mensagens recebidas deste número
+                  automaticamente.
+                </>
+              ) : (
+                <>
+                  A Fran <strong>não responderá mais</strong> as mensagens
+                  recebidas deste número. Use quando o gestor precisar assumir
+                  o atendimento manualmente. O bloqueio pode ser revertido
+                  depois.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {conversa?.devedor && (
+            <div className="rounded-md border bg-muted/30 p-3 text-sm">
+              <p className="font-medium">{conversa.devedor.nome_devedor}</p>
+              <p className="text-xs text-muted-foreground">
+                {formatTelefone(conversa.devedor.telefone)}
+                {conversa.devedor.instituicao &&
+                  ` · ${conversa.devedor.instituicao}`}
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmandoToggle(false)}
+              disabled={alterandoBlock}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant={iaBloqueada ? "default" : "destructive"}
+              onClick={confirmarToggle}
+              disabled={alterandoBlock}
+            >
+              {alterandoBlock ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : iaBloqueada ? (
+                <ShieldCheck className="mr-2 h-4 w-4" />
+              ) : (
+                <Ban className="mr-2 h-4 w-4" />
+              )}
+              {iaBloqueada ? "Desbloquear" : "Bloquear"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
