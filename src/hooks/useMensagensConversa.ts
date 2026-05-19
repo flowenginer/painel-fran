@@ -1,9 +1,12 @@
 // Thread completa de uma conversa.
-// Como o session_id da fran_memory vem em vários formatos (com/sem máscara),
-// buscamos um conjunto generoso e filtramos no client pelo telefone normalizado.
+// O session_id da fran_memory vem em formatos variados (com/sem máscara),
+// então usamos ilike no "número sem 55" e filtramos no client pelo
+// telefone normalizado. Pagina automaticamente sob o limite de 1000 do
+// PostgREST.
 import { useQuery } from "@tanstack/react-query";
 
 import { supabase } from "@/lib/supabase";
+import { fetchAllPages } from "@/lib/supabase-pagination";
 import {
   ehMensagemVisivel,
   parsearMensagem,
@@ -11,36 +14,26 @@ import {
   type MensagemParsed,
 } from "@/lib/conversas";
 
-const LIMITE_THREAD = 1000;
-
 async function fetchMensagens(
   telefoneNormalizado: string
 ): Promise<MensagemParsed[]> {
   if (!telefoneNormalizado) return [];
 
-  // Estratégia: como o supabase-js não permite regex/normalização no WHERE,
-  // buscamos por ilike contendo o telefone "sem 55" (pra cobrir variações com
-  // ou sem código de país) e filtramos no client.
   const numeroSem55 = telefoneNormalizado.startsWith("55")
     ? telefoneNormalizado.slice(2)
     : telefoneNormalizado;
 
-  const { data, error } = await supabase
-    .from("fran_memory")
-    .select("id, session_id, message")
-    .ilike("session_id", `%${numeroSem55}%`)
-    .order("id", { ascending: true })
-    .limit(LIMITE_THREAD);
+  const todos = await fetchAllPages<FranMemoryRow>(() =>
+    supabase
+      .from("fran_memory")
+      .select("id, session_id, message")
+      .ilike("session_id", `%${numeroSem55}%`)
+      .order("id", { ascending: true })
+  );
 
-  if (error) throw error;
-
-  const parsed = ((data ?? []) as FranMemoryRow[])
+  return todos
     .map(parsearMensagem)
-    .filter(
-      (m) => m.session_id_normalizado === telefoneNormalizado
-    );
-
-  return parsed;
+    .filter((m) => m.session_id_normalizado === telefoneNormalizado);
 }
 
 export function useMensagensConversa(telefoneNormalizado: string | null) {

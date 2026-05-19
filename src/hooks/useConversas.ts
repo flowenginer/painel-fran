@@ -2,9 +2,12 @@
 // - Ordena: quem tem mensagem mais recente em cima
 // - Devedores sem mensagem aparecem no final (ordem alfabética)
 // - Faz match por telefone normalizado (só dígitos) com session_id da fran_memory
+//
+// Pagina automaticamente sob o limite de 1000 linhas do PostgREST.
 import { useQuery } from "@tanstack/react-query";
 
 import { supabase } from "@/lib/supabase";
+import { fetchAllPages } from "@/lib/supabase-pagination";
 import {
   ehMensagemVisivel,
   normalizarSessionId,
@@ -27,33 +30,27 @@ export interface ConversaItem {
   total_mensagens: number;
 }
 
-const LIMITE_MENSAGENS = 5000;
-
 async function fetchConversas(): Promise<ConversaItem[]> {
-  // 1. Devedores (todos) e mensagens recentes em paralelo.
-  const [devedoresRes, mensagensRes] = await Promise.all([
-    supabase
-      .from("fran_devedores")
-      .select(
-        "id, cpf, nome_devedor, primeiro_nome, telefone, telefone_2, telefone_3, instituicao, status_negociacao, data_ultimo_contato, tentativas_contato, created_at, updated_at"
-      )
-      .order("updated_at", { ascending: false, nullsFirst: false }),
-    supabase
-      .from("fran_memory")
-      .select("id, session_id, message")
-      .order("id", { ascending: false })
-      .limit(LIMITE_MENSAGENS),
+  // 1. Devedores (todos, paginados) e mensagens (todas, paginadas) em paralelo.
+  const [devedores, mensagensRaw] = await Promise.all([
+    fetchAllPages<Devedor>(() =>
+      supabase
+        .from("fran_devedores")
+        .select(
+          "id, cpf, nome_devedor, primeiro_nome, telefone, telefone_2, telefone_3, instituicao, status_negociacao, data_ultimo_contato, tentativas_contato, created_at, updated_at"
+        )
+        .order("updated_at", { ascending: false, nullsFirst: false })
+    ),
+    fetchAllPages<FranMemoryRow>(() =>
+      supabase
+        .from("fran_memory")
+        .select("id, session_id, message")
+        .order("id", { ascending: false })
+    ),
   ]);
 
-  if (devedoresRes.error) throw devedoresRes.error;
-  if (mensagensRes.error) throw mensagensRes.error;
-
-  const devedores = (devedoresRes.data ?? []) as Devedor[];
-  const mensagensRaw = (mensagensRes.data ?? []) as FranMemoryRow[];
-
   // 2. Agrupa mensagens por telefone normalizado.
-  // Como veio em ordem DESC pelo id, a primeira mensagem que encontrarmos
-  // pra cada telefone é a mais recente.
+  // mensagensRaw já veio ordenado DESC por id (mais novo em cima).
   type Grupo = {
     telefone: string;
     session_id_exibicao: string;
@@ -96,7 +93,6 @@ async function fetchConversas(): Promise<ConversaItem[]> {
   // depois os sem mensagens (alfabético).
   const usados = new Set<number>();
   const comMsg: ConversaItem[] = [];
-  // Reordena grupos pela id da última mensagem
   const gruposOrdenados = Array.from(grupos.values()).sort((a, b) => {
     const idA = a.ultima_visivel?.id ?? 0;
     const idB = b.ultima_visivel?.id ?? 0;
