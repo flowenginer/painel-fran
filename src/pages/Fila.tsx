@@ -38,6 +38,7 @@ import { useConfig } from "@/hooks/useConfig";
 import { useSaveConfig } from "@/hooks/useSaveConfig";
 import { useToast } from "@/hooks/use-toast";
 import { formatBRL } from "@/lib/formatters";
+import { FilaConfigCard } from "@/components/fila/FilaConfigCard";
 
 // Estimativa de quanto tempo a fila atual leva para esvaziar, dado o teto
 // diário e a janela de horário. Puramente informativa.
@@ -189,6 +190,8 @@ export function Fila() {
         <StatCard label="Previsão para esvaziar" value={previsao} />
       </div>
 
+      <FilaConfigCard />
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
@@ -332,6 +335,8 @@ function descreverMotivo(
       return "Não há devedores aguardando na fila.";
     case "fora_horario":
       return `Fora da janela de horário (${janela.horaInicio}–${janela.horaFim}).`;
+    case "fora_dia_semana":
+      return "Hoje não é um dia de disparo configurado.";
     case "limite_diario_atingido":
       return "Limite diário já atingido. Retoma amanhã.";
     case "limite_hora_atingido":

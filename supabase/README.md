@@ -241,14 +241,15 @@ pela UI ("Processar agora", na tela Fila de Disparo).
 supabase functions deploy processar-fila
 ```
 
-A cada execução respeita, nesta ordem: `fila_ativa` → janela de horário →
-`fila_disparos_por_hora` → `limite_diario_disparos`. Ao bater o limite do
-dia, não envia mais nada e retoma naturalmente no dia seguinte.
+A cada execução respeita, nesta ordem: `fila_ativa` → `fila_dias_semana` →
+janela de horário → `fila_disparos_por_hora` → `limite_diario_disparos`. Ao
+bater o limite do dia, não envia mais nada e retoma naturalmente no próximo
+dia permitido.
 
 ### Setup completo (uma vez)
 
-1. Rode `migrations/0001_fila_disparo.sql` no SQL Editor (cria a tabela
-   `fran_fila_disparo`, RLS e seeds de config).
+1. Rode `migrations/0001_fila_disparo.sql` e `migrations/0002_fila_dias_semana.sql`
+   no SQL Editor (cria a tabela `fran_fila_disparo`, RLS e seeds de config).
 2. Faça o deploy desta função.
 3. Siga o passo 5 do SQL para gerar o `fila_cron_secret` e agendar o
    `pg_cron` chamando esta função.
@@ -270,9 +271,14 @@ dia, não envia mais nada e retoma naturalmente no dia seguinte.
 { "ok": true, "processados": 0, "enviados": 0, "motivo": "fila_pausada" }
 ```
 
-Motivos possíveis em `motivo`: `fila_pausada`, `fora_horario`, `fila_vazia`,
-`limite_diario_atingido`, `limite_hora_atingido`, `taxa_por_hora_zerada`,
-`nenhum_elegivel`.
+Motivos possíveis em `motivo`: `fila_pausada`, `fora_dia_semana`,
+`fora_horario`, `fila_vazia`, `limite_diario_atingido`,
+`limite_hora_atingido`, `taxa_por_hora_zerada`, `nenhum_elegivel`.
+
+Configs da fila (em `fran_config`, editáveis na tela Fila de Disparo):
+`fila_ativa`, `fila_disparos_por_hora`, `fila_dias_semana` (ex: `1,2,3,4,5`
+= seg-sex; 0=dom..6=sáb), além de `limite_diario_disparos` e
+`horario_disparo_inicio`/`fim` (compartilhados com o disparo manual).
 
 **Efeitos colaterais** por devedor enviado: INSERT em `fran_disparos`,
 UPDATE do item da fila para `enviado`, UPDATE do devedor
