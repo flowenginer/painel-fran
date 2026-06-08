@@ -129,6 +129,46 @@ export interface DevedorNormalizado {
   dado_adicional: string | null;
 }
 
+// Status de um item na fila de distribuição (fran_fila_disparo).
+export type StatusFila = "na_fila" | "enviado" | "erro" | "cancelado";
+
+// Item da fila de distribuição (fran_fila_disparo).
+export interface FilaItem {
+  id: number;
+  devedor_id: number;
+  status: StatusFila;
+  prioridade: number;
+  campanha: string | null;
+  tentativas: number;
+  erro_detalhes: string | null;
+  enfileirado_por: string | null;
+  data_processado: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Item da fila com o devedor embutido (join), usado na tela de Fila.
+export interface FilaItemComDevedor extends FilaItem {
+  devedor: Pick<
+    Devedor,
+    | "id"
+    | "nome_devedor"
+    | "primeiro_nome"
+    | "telefone"
+    | "instituicao"
+    | "valor_atualizado"
+    | "status_negociacao"
+  > | null;
+}
+
+// Agregados exibidos no topo da tela de Fila.
+export interface FilaStats {
+  naFila: number;
+  enviados: number;
+  erros: number;
+  enviadosHoje: number;
+}
+
 // Disparo (tabela fran_disparos - nova)
 export interface Disparo {
   id: number;

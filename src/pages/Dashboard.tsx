@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Plus, Send, Upload } from "lucide-react";
+import { ListPlus, Loader2, Plus, Send, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -21,8 +21,10 @@ import { ImportarDevedoresCsvDialog } from "@/components/adicionar-devedor/Impor
 import { useDevedoresFilters } from "@/hooks/useDevedoresFilters";
 import { useDevedoresRealtime } from "@/hooks/useDevedoresRealtime";
 import { useSelecaoDevedores } from "@/hooks/useSelecaoDevedores";
+import { useEnfileirar } from "@/hooks/useFilaMutations";
 import { useKpis } from "@/hooks/useKpis";
 import { useConfig } from "@/hooks/useConfig";
+import { useToast } from "@/hooks/use-toast";
 import { horaAtualSaoPaulo } from "@/lib/dates";
 import type { Devedor } from "@/lib/types";
 
@@ -39,6 +41,8 @@ export function Dashboard() {
     useDevedoresFilters();
   const flashIds = useDevedoresRealtime();
   const { selecionados, toggle, togglePagina, limpar } = useSelecaoDevedores();
+  const enfileirar = useEnfileirar();
+  const { toast } = useToast();
 
   const [adicionarOpen, setAdicionarOpen] = useState(false);
   const [importarCsvOpen, setImportarCsvOpen] = useState(false);
@@ -103,6 +107,37 @@ export function Dashboard() {
     [selecionados]
   );
 
+  async function enviarParaFila() {
+    try {
+      const r = await enfileirar.mutateAsync({ devedorIds: idsParaDisparar });
+      const partes: string[] = [];
+      if (r.jaNaFila > 0) partes.push(`${r.jaNaFila} já estavam na fila`);
+      if (r.naoElegiveis > 0)
+        partes.push(`${r.naoElegiveis} não pendente(s) ignorado(s)`);
+      if (r.enfileirados > 0) {
+        toast({
+          variant: "success",
+          title: `${r.enfileirados} devedor(es) na fila`,
+          description: partes.length ? partes.join(". ") + "." : undefined,
+        });
+        limpar();
+      } else {
+        toast({
+          title: "Nada enfileirado",
+          description: partes.length
+            ? partes.join(". ") + "."
+            : "Selecione devedores pendentes ainda não enfileirados.",
+        });
+      }
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao enviar para fila",
+        description: err instanceof Error ? err.message : "Erro desconhecido",
+      });
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -137,6 +172,21 @@ export function Dashboard() {
           >
             <Plus className="mr-2 h-4 w-4" />
             Adicionar Devedor
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={selCount === 0 || enfileirar.isPending}
+            title="Adiciona os selecionados à fila de distribuição automática"
+            onClick={enviarParaFila}
+          >
+            {enfileirar.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <ListPlus className="mr-2 h-4 w-4" />
+            )}
+            Enviar para fila
+            {selCount > 0 && ` (${selCount})`}
           </Button>
           <Button
             size="sm"

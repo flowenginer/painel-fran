@@ -27,6 +27,7 @@ interface FormState {
   uazapi_webhook_url: string;
   uazapi_webhook_secret: string;
   limite_diario_disparos: string;
+  fila_disparos_por_hora: string;
   horario_disparo_inicio: string;
   horario_disparo_fim: string;
 }
@@ -38,6 +39,7 @@ const DEFAULTS: FormState = {
   uazapi_webhook_url: "",
   uazapi_webhook_secret: "",
   limite_diario_disparos: "40",
+  fila_disparos_por_hora: "10",
   horario_disparo_inicio: "08:00",
   horario_disparo_fim: "20:00",
 };
@@ -63,6 +65,8 @@ export function Configuracoes() {
         uazapi_webhook_secret: data.uazapi_webhook_secret ?? "",
         limite_diario_disparos:
           data.limite_diario_disparos ?? DEFAULTS.limite_diario_disparos,
+        fila_disparos_por_hora:
+          data.fila_disparos_por_hora ?? DEFAULTS.fila_disparos_por_hora,
         horario_disparo_inicio:
           data.horario_disparo_inicio ?? DEFAULTS.horario_disparo_inicio,
         horario_disparo_fim:
@@ -83,6 +87,15 @@ export function Configuracoes() {
       toast({
         variant: "destructive",
         title: "Limite diário inválido",
+        description: "Informe um número inteiro positivo.",
+      });
+      return;
+    }
+    const porHora = Number(form.fila_disparos_por_hora);
+    if (!Number.isInteger(porHora) || porHora <= 0) {
+      toast({
+        variant: "destructive",
+        title: "Taxa por hora inválida",
         description: "Informe um número inteiro positivo.",
       });
       return;
@@ -114,6 +127,10 @@ export function Configuracoes() {
         {
           chave: "limite_diario_disparos",
           valor: String(limite),
+        },
+        {
+          chave: "fila_disparos_por_hora",
+          valor: String(porHora),
         },
         {
           chave: "horario_disparo_inicio",
@@ -354,7 +371,7 @@ export function Configuracoes() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label className="text-xs">Limite diário</Label>
               <Input
@@ -365,6 +382,21 @@ export function Configuracoes() {
                 disabled={isLoading}
               />
             </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Disparos por hora (fila)</Label>
+              <Input
+                type="number"
+                min={1}
+                value={form.fila_disparos_por_hora}
+                onChange={(e) => set("fila_disparos_por_hora", e.target.value)}
+                disabled={isLoading}
+              />
+              <p className="text-xs text-muted-foreground">
+                Teto por hora da fila automática (gotejamento).
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label className="text-xs">Horário início</Label>
               <Input

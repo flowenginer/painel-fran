@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 
 import { Login } from "@/pages/Login";
 import { Dashboard } from "@/pages/Dashboard";
+import { Fila } from "@/pages/Fila";
 import { Conversas } from "@/pages/Conversas";
 import { Instituicoes } from "@/pages/Instituicoes";
 import { Whatsapp } from "@/pages/Whatsapp";
@@ -26,6 +27,7 @@ function App() {
           }
         >
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/fila" element={<Fila />} />
           <Route path="/conversas" element={<Conversas />} />
           <Route path="/instituicoes" element={<Instituicoes />} />
           <Route path="/whatsapp" element={<Whatsapp />} />

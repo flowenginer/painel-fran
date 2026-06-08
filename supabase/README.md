@@ -2,8 +2,8 @@
 
 Esta pasta contém as Edge Functions do painel. O schema do banco (tabelas
 `fran_devedores`, `fran_instituicoes`, `fran_config`, `fran_disparos`,
-`fran_memory`) vive diretamente no Supabase Cloud e é mantido via UI do
-projeto.
+`fran_fila_disparo`, `fran_memory`) vive diretamente no Supabase Cloud e é
+mantido via UI do projeto. DDLs versionados ficam em `migrations/`.
 
 ## Estrutura
 
@@ -20,8 +20,13 @@ supabase/
 │   │   ├── alunos.ts                    # extração de nomes + acordo anterior
 │   │   ├── transform.ts                 # devedor bruto → DevedorNormalizado
 │   │   └── deno.json                    # config do Deno
+│   ├── _shared/
+│   │   └── disparo-core.ts              # lógica de disparo compartilhada
 │   ├── disparar-lote/
-│   │   ├── index.ts                     # valida limites + POST ao webhook n8n
+│   │   ├── index.ts                     # disparo manual: valida limites + POST n8n
+│   │   └── deno.json
+│   ├── processar-fila/
+│   │   ├── index.ts                     # drip automático da fila (chamado pelo pg_cron)
 │   │   └── deno.json
 │   └── uazapi-proxy/
 │       ├── index.ts                     # proxy para o webhook UAZAPI no n8n
@@ -226,6 +231,53 @@ Em caso de erro do webhook:
 - INSERT em `fran_disparos` com `status_envio='erro'` e `erro_detalhes`
 - NÃO altera o status do devedor (permite reprocessar)
 
+## Deploy da Edge Function `processar-fila`
+
+Processa a **fila de distribuição** em gotejamento (drip). Pensada para ser
+chamada periodicamente pelo `pg_cron` (a cada 10 min) e também manualmente
+pela UI ("Processar agora", na tela Fila de Disparo).
+
+```bash
+supabase functions deploy processar-fila
+```
+
+A cada execução respeita, nesta ordem: `fila_ativa` → janela de horário →
+`fila_disparos_por_hora` → `limite_diario_disparos`. Ao bater o limite do
+dia, não envia mais nada e retoma naturalmente no dia seguinte.
+
+### Setup completo (uma vez)
+
+1. Rode `migrations/0001_fila_disparo.sql` no SQL Editor (cria a tabela
+   `fran_fila_disparo`, RLS e seeds de config).
+2. Faça o deploy desta função.
+3. Siga o passo 5 do SQL para gerar o `fila_cron_secret` e agendar o
+   `pg_cron` chamando esta função.
+4. Na tela **Configurações**, ajuste "Disparos por hora (fila)" e o limite
+   diário; na tela **Fila de Disparo**, clique em **Ativar**.
+
+### Contrato
+
+**Request** (POST JSON). Autorização por um dos dois:
+- header `x-cron-secret: <fila_cron_secret>` (usado pelo pg_cron), ou
+- `Authorization: Bearer <user-jwt>` (botão "Processar agora").
+
+```json
+// Response 200 (exemplo)
+{ "ok": true, "processados": 2, "enviados": 2, "erros": 0,
+  "restante_dia": 38, "limite_diario": 40, "por_hora": 10 }
+
+// Quando não há nada a fazer (ainda 200):
+{ "ok": true, "processados": 0, "enviados": 0, "motivo": "fila_pausada" }
+```
+
+Motivos possíveis em `motivo`: `fila_pausada`, `fora_horario`, `fila_vazia`,
+`limite_diario_atingido`, `limite_hora_atingido`, `taxa_por_hora_zerada`,
+`nenhum_elegivel`.
+
+**Efeitos colaterais** por devedor enviado: INSERT em `fran_disparos`,
+UPDATE do item da fila para `enviado`, UPDATE do devedor
+(`status_negociacao='primeira_msg'`, datas de disparo/contato).
+
 ## Schema do banco (referência)
 
 O schema está ativo no Supabase via UI. Para recriar em outro ambiente,
@@ -259,6 +311,22 @@ CREATE TABLE public.fran_disparos (
     webhook_response JSONB,
     usuario_id UUID REFERENCES auth.users(id),
     created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Fila de distribuição (drip). DDL completo + RLS + pg_cron em
+-- migrations/0001_fila_disparo.sql
+CREATE TABLE public.fran_fila_disparo (
+    id BIGSERIAL PRIMARY KEY,
+    devedor_id BIGINT NOT NULL REFERENCES fran_devedores(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'na_fila',  -- na_fila|enviado|erro|cancelado
+    prioridade INT NOT NULL DEFAULT 0,
+    campanha TEXT,
+    tentativas INT NOT NULL DEFAULT 0,
+    erro_detalhes TEXT,
+    enfileirado_por UUID REFERENCES auth.users(id),
+    data_processado TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ```
 
