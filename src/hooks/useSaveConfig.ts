@@ -9,16 +9,22 @@ export interface ConfigUpdate {
 }
 
 async function salvarConfigs(updates: ConfigUpdate[]): Promise<void> {
-  // Faz UPDATE por chave em paralelo (as linhas já existem via seed).
-  const promessas = updates.map((u) =>
-    supabase
+  // UPDATE por chave; se a linha ainda não existir (chave nova que não veio
+  // de um seed/migration), faz INSERT. Mantém o UPDATE como caminho normal
+  // — só insere quando necessário, para não exigir migration de cada chave.
+  for (const u of updates) {
+    const { data, error } = await supabase
       .from("fran_config")
       .update({ valor: u.valor, updated_at: new Date().toISOString() })
       .eq("chave", u.chave)
-  );
-  const resultados = await Promise.all(promessas);
-  for (const r of resultados) {
-    if (r.error) throw r.error;
+      .select("chave");
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      const { error: insErr } = await supabase
+        .from("fran_config")
+        .insert({ chave: u.chave, valor: u.valor });
+      if (insErr) throw insErr;
+    }
   }
 }
 

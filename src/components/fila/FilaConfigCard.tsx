@@ -38,10 +38,13 @@ interface FormState {
 function parseDias(valor: string | undefined): Set<number> {
   const s = new Set<number>();
   for (const parte of (valor ?? "").split(",")) {
-    const n = Number(parte.trim());
+    const t = parte.trim();
+    // Ignora partes vazias — Number("") é 0, o que marcaria "Dom" por engano.
+    if (t === "") continue;
+    const n = Number(t);
     if (Number.isInteger(n) && n >= 0 && n <= 6) s.add(n);
   }
-  // Vazio = todos os dias.
+  // Vazio/ausente = todos os dias.
   if (s.size === 0) for (let i = 0; i <= 6; i++) s.add(i);
   return s;
 }
