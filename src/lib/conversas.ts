@@ -57,6 +57,35 @@ export function normalizarSessionId(s: string | null | undefined): string {
   return (s ?? "").replace(/\D/g, "");
 }
 
+/**
+ * Variantes canônicas de um telefone para casar conversa ↔ devedor mesmo
+ * quando um lado tem o 9º dígito do celular e o outro não.
+ *
+ * Celular BR: 55 (país) + DDD (2) + 9 + 8 dígitos = 13 dígitos. Muitos
+ * cadastros/sessões vêm com 12 (sem o 9). Geramos as duas formas para que
+ * a comparação funcione independente do formato salvo.
+ *
+ * Retorna sempre ao menos o número normalizado; adiciona a forma alternada
+ * apenas para padrões BR plausíveis (extras não casam com nada — inócuos).
+ */
+export function variantesTelefone(s: string | null | undefined): string[] {
+  const norm = normalizarSessionId(s);
+  if (!norm) return [];
+  const variantes = new Set<string>([norm]);
+  if (norm.startsWith("55")) {
+    const ddd = norm.slice(2, 4);
+    const resto = norm.slice(4);
+    if (norm.length === 13 && resto.startsWith("9")) {
+      // Tem o 9 → adiciona a forma sem o 9.
+      variantes.add("55" + ddd + resto.slice(1));
+    } else if (norm.length === 12) {
+      // Sem o 9 → adiciona a forma com o 9.
+      variantes.add("55" + ddd + "9" + resto);
+    }
+  }
+  return Array.from(variantes);
+}
+
 /** Faz parse seguro do JSON da mensagem com fallback. */
 export function parsearMensagem(row: FranMemoryRow): MensagemParsed {
   let payload: MensagemPayload | null = null;

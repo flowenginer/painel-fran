@@ -12,6 +12,7 @@ import {
   ehMensagemVisivel,
   normalizarSessionId,
   parsearMensagem,
+  variantesTelefone,
   type FranMemoryRow,
   type MensagemParsed,
 } from "@/lib/conversas";
@@ -78,13 +79,15 @@ async function fetchConversas(): Promise<ConversaItem[]> {
     }
   }
 
-  // 3. Indexa devedores por todos os seus telefones (1, 2 e 3).
+  // 3. Indexa devedores por todos os seus telefones (1, 2 e 3), incluindo
+  // as variantes com/sem o 9º dígito para casar mesmo com formatos diferentes.
   const devedorPorTelefone = new Map<string, Devedor>();
   for (const d of devedores) {
     for (const tel of [d.telefone, d.telefone_2, d.telefone_3]) {
-      const norm = normalizarSessionId(tel);
-      if (norm && !devedorPorTelefone.has(norm)) {
-        devedorPorTelefone.set(norm, d);
+      for (const variante of variantesTelefone(tel)) {
+        if (!devedorPorTelefone.has(variante)) {
+          devedorPorTelefone.set(variante, d);
+        }
       }
     }
   }
@@ -100,7 +103,11 @@ async function fetchConversas(): Promise<ConversaItem[]> {
   });
 
   for (const g of gruposOrdenados) {
-    const devedor = devedorPorTelefone.get(g.telefone) ?? null;
+    // Tenta casar pelo telefone do grupo e suas variantes (com/sem o 9).
+    const devedor =
+      variantesTelefone(g.telefone)
+        .map((v) => devedorPorTelefone.get(v))
+        .find((d): d is Devedor => Boolean(d)) ?? null;
     if (devedor) usados.add(devedor.id);
     comMsg.push({
       devedor,
