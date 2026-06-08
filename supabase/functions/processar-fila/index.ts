@@ -26,6 +26,7 @@ import {
 import {
   contarEnviadosDesde,
   dentroDoHorario,
+  diaPermitido,
   enviarWebhook,
   inicioHojeSaoPauloUTC,
   inicioHoraAtualSaoPauloUTC,
@@ -100,6 +101,7 @@ Deno.serve(async (req: Request) => {
     const cfg = await lerConfig(env, [
       "fila_ativa",
       "fila_disparos_por_hora",
+      "fila_dias_semana",
       "fila_cron_secret",
       "limite_diario_disparos",
       "horario_disparo_inicio",
@@ -124,6 +126,9 @@ Deno.serve(async (req: Request) => {
         { error: "URL do webhook n8n não configurada." },
         400
       );
+    }
+    if (!diaPermitido(cfg.fila_dias_semana)) {
+      return ocioso("fora_dia_semana");
     }
     if (!dentroDoHorario(horaInicio, horaFim)) {
       return ocioso("fora_horario", { horario: `${horaInicio}-${horaFim}` });

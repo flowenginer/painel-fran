@@ -95,6 +95,38 @@ export function inicioHoraAtualSaoPauloUTC(): string {
   return new Date(`${ano}-${mes}-${dia}T${hora}:00:00-03:00`).toISOString();
 }
 
+// Dia da semana atual em São Paulo: 0=domingo .. 6=sábado (igual a
+// Date.getDay), mas calculado no fuso correto.
+export function diaSemanaSaoPaulo(): number {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: TZ,
+    weekday: "short",
+  });
+  const dia = fmt.format(new Date());
+  const mapa: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
+  return mapa[dia] ?? new Date().getUTCDay();
+}
+
+// Verifica se hoje (em SP) está entre os dias permitidos. `dias` é uma
+// lista separada por vírgula com índices 0-6 (ex: "1,2,3,4,5" = seg-sex).
+// Vazio/ausente = todos os dias permitidos (não bloqueia).
+export function diaPermitido(dias: string | undefined | null): boolean {
+  const lista = (dias ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (lista.length === 0) return true;
+  return lista.includes(String(diaSemanaSaoPaulo()));
+}
+
 export function dentroDoHorario(inicio: string, fim: string): boolean {
   const fmt = new Intl.DateTimeFormat("en-GB", {
     timeZone: TZ,
