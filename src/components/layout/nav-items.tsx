@@ -1,6 +1,7 @@
 import {
   Building2,
   LayoutDashboard,
+  ListOrdered,
   MessageSquare,
   Settings,
   Smartphone,
@@ -15,6 +16,7 @@ export interface NavItem {
 
 export const navItems: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/fila", label: "Fila de Disparo", icon: ListOrdered },
   { to: "/conversas", label: "Conversas", icon: MessageSquare },
   { to: "/instituicoes", label: "Instituições", icon: Building2 },
   { to: "/whatsapp", label: "WhatsApp", icon: Smartphone },
