@@ -28,8 +28,13 @@ function iniciais(email: string | undefined) {
 }
 
 export function Header() {
-  const { user, signOut } = useAuth();
+  const { user, perfil, isAdmin, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const papelLabel = isAdmin
+    ? "Administrador"
+    : perfil
+      ? "Operador"
+      : "";
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 md:px-6">
@@ -81,7 +86,9 @@ export function Header() {
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuLabel>
             <div className="flex flex-col">
-              <span className="text-sm font-medium">Admin</span>
+              <span className="text-sm font-medium">
+                {perfil?.nome || papelLabel || "Usuário"}
+              </span>
               <span className="text-xs font-normal text-muted-foreground truncate">
                 {user?.email}
               </span>
