@@ -47,23 +47,26 @@ async function chamar<T>(
   return data;
 }
 
-export interface CriarUsuarioInput {
+// Tipos (não interfaces) de propósito: um `type` ganha index signature
+// implícita e é atribuível a Record<string, unknown> (parâmetro de `chamar`),
+// o que uma interface não permitiria.
+export type CriarUsuarioInput = {
   email: string;
   password: string;
   nome?: string | null;
   role?: UsuarioRole;
   recebe_distribuicao?: boolean;
   permissoes?: UsuarioPermissoes;
-}
+};
 
-export interface AtualizarUsuarioInput {
+export type AtualizarUsuarioInput = {
   id: string;
   nome?: string | null;
   role?: UsuarioRole;
   ativo?: boolean;
   recebe_distribuicao?: boolean;
   permissoes?: UsuarioPermissoes;
-}
+};
 
 export async function listarUsuarios(): Promise<UsuarioPerfil[]> {
   const r = await chamar<{ usuarios: UsuarioPerfil[] }>("listar");
