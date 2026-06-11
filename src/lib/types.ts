@@ -3,6 +3,31 @@
  * Conforme schema definido no PRD v2.
  */
 
+// Papéis de acesso ao painel.
+export type UsuarioRole = "admin" | "operador";
+
+// Permissões granulares ditadas pelo admin. Listas de identificadores de
+// páginas (rotas) e ações (funcionalidades) liberadas para o usuário.
+// O admin ignora estas listas (acesso total).
+export interface UsuarioPermissoes {
+  paginas: string[];
+  acoes: string[];
+}
+
+// Perfil do usuário (tabela fran_usuarios, 1:1 com auth.users).
+export interface UsuarioPerfil {
+  id: string;
+  nome: string | null;
+  email: string | null;
+  role: UsuarioRole;
+  ativo: boolean;
+  recebe_distribuicao: boolean;
+  permissoes: UsuarioPermissoes;
+  ultima_atribuicao_em: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // Status possíveis de negociação de um devedor
 export type StatusNegociacao =
   | "pendente"
