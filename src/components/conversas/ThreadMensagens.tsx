@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
+  ArrowLeftRight,
   Ban,
   Inbox,
   Loader2,
@@ -8,6 +9,7 @@ import {
   MessageSquare,
   Phone,
   ShieldCheck,
+  UserRound,
 } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -31,9 +33,13 @@ import {
   useToggleBlockIA,
 } from "@/hooks/useDevedorMutations";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { useOperadores } from "@/hooks/useOperadores";
+import { nomeOperador } from "@/lib/conversas-transfer";
 import { formatTelefone } from "@/lib/formatters";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { MensagemBubble } from "./MensagemBubble";
+import { TransferirConversaDialog } from "./TransferirConversaDialog";
 import type { ConversaItem } from "@/hooks/useConversas";
 
 interface Props {
@@ -60,11 +66,19 @@ export function ThreadMensagens({ conversa }: Props) {
   const visiveis = filtrarVisiveis(data ?? []);
 
   const [confirmandoToggle, setConfirmandoToggle] = useState(false);
+  const [transferindo, setTransferindo] = useState(false);
   const { mutateAsync: toggleBlock, isPending: alterandoBlock } =
     useToggleBlockIA();
   const { toast } = useToast();
+  const { isAdmin, temPermissao } = useAuth();
+  const { data: operadores } = useOperadores();
 
   const iaBloqueada = conversa?.devedor?.status === STATUS_BLOCK_IA;
+  const responsavelId = conversa?.devedor?.responsavel_id ?? null;
+  const responsavelNome = nomeOperador(operadores, responsavelId);
+  const podeTransferir =
+    !!conversa?.devedor &&
+    (isAdmin || temPermissao("acao", "transferir_conversa"));
 
   async function confirmarToggle() {
     if (!conversa?.devedor) return;
@@ -136,6 +150,27 @@ export function ThreadMensagens({ conversa }: Props) {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {conversa.devedor && (
+            <Badge
+              variant="outline"
+              className="gap-1 text-[10px]"
+              title="Operador responsável por esta conversa"
+            >
+              <UserRound className="h-3 w-3" />
+              {responsavelNome ?? "Sem responsável"}
+            </Badge>
+          )}
+          {podeTransferir && conversa.devedor && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setTransferindo(true)}
+              title="Transferir esta conversa para outro operador"
+            >
+              <ArrowLeftRight className="mr-1.5 h-3.5 w-3.5" />
+              Transferir
+            </Button>
+          )}
           {conversa.devedor?.status_negociacao && (
             <StatusBadge status={conversa.devedor.status_negociacao} />
           )}
@@ -289,6 +324,18 @@ export function ThreadMensagens({ conversa }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de transferência de conversa */}
+      {conversa.devedor && (
+        <TransferirConversaDialog
+          open={transferindo}
+          onOpenChange={setTransferindo}
+          devedorId={conversa.devedor.id}
+          devedorNome={conversa.devedor.nome_devedor}
+          responsavelAtualId={responsavelId}
+          operadores={operadores ?? []}
+        />
+      )}
     </div>
   );
 }

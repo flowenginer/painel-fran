@@ -187,6 +187,11 @@ Mesma sequência do `cedrus-buscar`:
 supabase functions deploy disparar-lote
 ```
 
+> Esta função é **autossuficiente** (sem imports de `_shared`), então também
+> pode ser deployada colando o `index.ts` no editor de Edge Functions do
+> Dashboard, sem CLI. A lógica de disparo é compartilhada por cópia com
+> `processar-fila` — ao alterá-la, replicar nas duas.
+
 ### Contrato
 
 **Request** (POST JSON, requer JWT do operador):
@@ -240,6 +245,10 @@ pela UI ("Processar agora", na tela Fila de Disparo).
 ```bash
 supabase functions deploy processar-fila
 ```
+
+> Também **autossuficiente** (sem `_shared`): pode ser deployada colando o
+> `index.ts` no editor do Dashboard, sem CLI. Compartilha a lógica de disparo
+> por cópia com `disparar-lote` — ao alterá-la, replicar nas duas.
 
 A cada execução respeita, nesta ordem: `fila_ativa` → `fila_dias_semana` →
 janela de horário → `fila_disparos_por_hora` → `limite_diario_disparos`. Ao

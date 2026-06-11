@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
-import { Ban, Search } from "lucide-react";
+import { Ban, Search, UserRound } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { previewContent } from "@/lib/conversas";
+import { nomeOperador, type OperadorLite } from "@/lib/conversas-transfer";
 import { formatTelefone } from "@/lib/formatters";
 import { STATUS_BLOCK_IA } from "@/hooks/useDevedorMutations";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
@@ -16,6 +17,9 @@ interface Props {
   selecionada: string | null;
   onSelecionar: (telefone: string) => void;
   isLoading: boolean;
+  /** Mostra o operador responsável em cada item (visão de admin). */
+  mostrarResponsavel?: boolean;
+  operadores?: OperadorLite[];
 }
 
 function iniciais(nome: string | null | undefined): string {
@@ -34,6 +38,8 @@ export function ListaConversas({
   selecionada,
   onSelecionar,
   isLoading,
+  mostrarResponsavel = false,
+  operadores,
 }: Props) {
   const [busca, setBusca] = useState("");
 
@@ -126,6 +132,16 @@ export function ListaConversas({
                         : `+${c.telefone_normalizado}`}
                     </p>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      {mostrarResponsavel && c.devedor && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground"
+                          title="Operador responsável"
+                        >
+                          <UserRound className="h-3 w-3" />
+                          {nomeOperador(operadores, c.devedor.responsavel_id) ??
+                            "sem responsável"}
+                        </span>
+                      )}
                       {c.devedor?.status_negociacao && (
                         <StatusBadge
                           status={c.devedor.status_negociacao}

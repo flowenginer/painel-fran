@@ -4,9 +4,11 @@
 // - Faz match por telefone normalizado (só dígitos) com session_id da fran_memory
 //
 // Pagina automaticamente sob o limite de 1000 linhas do PostgREST.
+import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/hooks/useAuth";
 import { fetchAllPages } from "@/lib/supabase-pagination";
 import {
   ehMensagemVisivel,
@@ -38,7 +40,7 @@ async function fetchConversas(): Promise<ConversaItem[]> {
       supabase
         .from("fran_devedores")
         .select(
-          "id, cpf, nome_devedor, primeiro_nome, telefone, telefone_2, telefone_3, instituicao, status_negociacao, status, data_ultimo_contato, tentativas_contato, created_at, updated_at"
+          "id, cpf, nome_devedor, primeiro_nome, telefone, telefone_2, telefone_3, instituicao, status_negociacao, status, responsavel_id, data_ultimo_contato, tentativas_contato, created_at, updated_at"
         )
         .order("updated_at", { ascending: false, nullsFirst: false })
     ),
@@ -136,10 +138,39 @@ async function fetchConversas(): Promise<ConversaItem[]> {
   return [...comMsg, ...semMsg];
 }
 
-export function useConversas() {
+/**
+ * Lista de conversas filtrada por dono:
+ * - admin vê todas (e pode filtrar por um operador via `filtroResponsavel`);
+ * - operador vê apenas as conversas dos leads atribuídos a ele.
+ *
+ * O filtro é aplicado no `select` (a query base é compartilhada no cache).
+ * A trava de verdade no banco (RLS) virá na Fase 5.
+ */
+export function useConversas(filtroResponsavel?: string | null) {
+  const { user, isAdmin } = useAuth();
+  const uid = user?.id ?? null;
+
+  const filtrar = useCallback(
+    (lista: ConversaItem[]): ConversaItem[] => {
+      if (isAdmin) {
+        if (filtroResponsavel) {
+          return lista.filter(
+            (c) => c.devedor?.responsavel_id === filtroResponsavel
+          );
+        }
+        return lista;
+      }
+      return lista.filter(
+        (c) => uid != null && c.devedor?.responsavel_id === uid
+      );
+    },
+    [isAdmin, filtroResponsavel, uid]
+  );
+
   return useQuery<ConversaItem[]>({
     queryKey: ["conversas"],
     queryFn: fetchConversas,
     staleTime: 10_000,
+    select: filtrar,
   });
 }
