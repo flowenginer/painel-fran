@@ -42,8 +42,7 @@ export function Login() {
 
   // Se já está logado, redireciona pro dashboard
   const from =
-    (location.state as { from?: { pathname: string } })?.from?.pathname ||
-    "/dashboard";
+    (location.state as { from?: { pathname: string } })?.from?.pathname || "/";
 
   if (!authLoading && session) {
     return <Navigate to={from} replace />;

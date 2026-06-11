@@ -1,16 +1,20 @@
 import { NavLink } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
-import { navItems } from "./nav-items";
+import { useAuth } from "@/hooks/useAuth";
+import { filtrarNavItems } from "./nav-items";
 
 interface SidebarProps {
   onNavigate?: () => void;
 }
 
 export function Sidebar({ onNavigate }: SidebarProps) {
+  const { isAdmin, temPermissao } = useAuth();
+  const itens = filtrarNavItems(isAdmin, temPermissao);
+
   return (
     <nav className="flex flex-col gap-1 p-3">
-      {navItems.map((item) => (
+      {itens.map((item) => (
         <NavLink
           key={item.to}
           to={item.to}
