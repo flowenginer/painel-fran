@@ -234,6 +234,33 @@ export interface WebhookResultado {
   erro: string | null;
 }
 
+// Atribui um responsável (round-robin) a cada devedor recém-disparado,
+// chamando a RPC fran_atribuir_responsavel uma vez por devedor. A escolha é
+// atômica e justa no banco (menos recentemente atribuído primeiro).
+// Não-fatal: falhas são apenas logadas — uma atribuição que falha não deve
+// quebrar o disparo, que já aconteceu.
+export async function atribuirResponsaveis(
+  env: SupabaseEnv,
+  devedorIds: number[]
+): Promise<void> {
+  for (const id of devedorIds) {
+    try {
+      const resp = await rest(env, "POST", "/rpc/fran_atribuir_responsavel", {
+        p_devedor_id: id,
+      });
+      if (!resp.ok) {
+        console.error(
+          `[distribuicao] falha ao atribuir devedor ${id}:`,
+          resp.status,
+          await resp.text()
+        );
+      }
+    } catch (err) {
+      console.error(`[distribuicao] exceção ao atribuir devedor ${id}:`, err);
+    }
+  }
+}
+
 // POST ao webhook n8n com timeout de 60s. Não lança — devolve resultado.
 export async function enviarWebhook(
   url: string,

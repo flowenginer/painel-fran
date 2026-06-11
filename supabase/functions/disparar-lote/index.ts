@@ -15,6 +15,7 @@ import {
   validarJwt,
 } from "../_shared/supabase-rest.ts";
 import {
+  atribuirResponsaveis,
   contarEnviadosDesde,
   dentroDoHorario,
   enviarWebhook,
@@ -271,6 +272,15 @@ Deno.serve(async (req: Request) => {
           "Erro ao atualizar devedores:",
           updResp.status,
           await updResp.text()
+        );
+      }
+      // Distribui os leads entre os operadores (round-robin), apenas no
+      // disparo inicial — reenvio não é "primeira mensagem" e o lead já
+      // tem (ou não) dono definido anteriormente.
+      if (!reenviar) {
+        await atribuirResponsaveis(
+          env,
+          elegiveis.map((d) => d.id)
         );
       }
     }

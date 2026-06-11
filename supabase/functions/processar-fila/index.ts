@@ -24,6 +24,7 @@ import {
   type SupabaseEnv,
 } from "../_shared/supabase-rest.ts";
 import {
+  atribuirResponsaveis,
   contarEnviadosDesde,
   dentroDoHorario,
   diaPermitido,
@@ -299,6 +300,8 @@ Deno.serve(async (req: Request) => {
           },
           { Prefer: "return=minimal" }
         );
+        // Distribui os leads recém-disparados entre os operadores (round-robin).
+        await atribuirResponsaveis(env, devedorIds);
       } else {
         erros += devedores.length;
         // Incrementa tentativas; se estourar o máximo, marca erro, senão

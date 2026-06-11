@@ -99,6 +99,8 @@ export interface Devedor {
   acordo_data_aceite: string | null;
   campanha: string | null;
   operador_responsavel: string | null;
+  /** Operador dono do lead (auth.users.id / fran_usuarios.id). Atribuído na 1ª mensagem. */
+  responsavel_id: string | null;
   data_primeiro_disparo: string | null;
   data_ultimo_contato: string | null;
   tentativas_contato: number | null;

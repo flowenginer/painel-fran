@@ -13,8 +13,85 @@
 // Usa service_role para a Admin API do GoTrue e para o PostgREST, ignorando
 // RLS. A autorização real é feita aqui (checa o papel do chamador).
 
-import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
-import { lerEnv, rest, validarJwt, type SupabaseEnv } from "../_shared/supabase-rest.ts";
+// NOTA: esta função é autossuficiente (sem imports de ../_shared) de
+// propósito, para poder ser colada e deployada direto pelo editor de Edge
+// Functions do Supabase Dashboard, sem CLI/terminal.
+
+// ---- CORS ------------------------------------------------------------------
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...corsHeaders },
+  });
+}
+
+// ---- Acesso ao Supabase (REST + Auth) --------------------------------------
+interface SupabaseEnv {
+  url: string;
+  anonKey: string;
+  serviceKey: string;
+}
+
+function lerEnv(): SupabaseEnv {
+  const url = Deno.env.get("SUPABASE_URL");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !anonKey || !serviceKey) {
+    throw new Error("Variáveis de ambiente do Supabase ausentes");
+  }
+  return { url, anonKey, serviceKey };
+}
+
+interface UserInfo {
+  id: string;
+  email?: string;
+}
+
+// Valida o JWT chamando /auth/v1/user.
+async function validarJwt(
+  env: SupabaseEnv,
+  authHeader: string
+): Promise<UserInfo> {
+  const resp = await fetch(`${env.url}/auth/v1/user`, {
+    headers: { Authorization: authHeader, apikey: env.anonKey },
+  });
+  if (!resp.ok) {
+    const texto = await resp.text().catch(() => "");
+    throw new Error(
+      `Sessão inválida (HTTP ${resp.status}): ${texto || "JWT não aceito"}`
+    );
+  }
+  const user = (await resp.json()) as UserInfo;
+  if (!user?.id) throw new Error("Usuário sem id retornado pelo auth");
+  return user;
+}
+
+// PostgREST com service role.
+async function rest(
+  env: SupabaseEnv,
+  method: "GET" | "POST" | "PATCH" | "DELETE",
+  path: string,
+  body?: unknown,
+  extraHeaders: Record<string, string> = {}
+): Promise<Response> {
+  return fetch(`${env.url}/rest/v1${path}`, {
+    method,
+    headers: {
+      apikey: env.serviceKey,
+      Authorization: `Bearer ${env.serviceKey}`,
+      "Content-Type": "application/json",
+      ...extraHeaders,
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+}
 
 interface Permissoes {
   paginas: string[];
