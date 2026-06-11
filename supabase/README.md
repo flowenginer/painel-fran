@@ -284,6 +284,38 @@ Configs da fila (em `fran_config`, editáveis na tela Fila de Disparo):
 UPDATE do item da fila para `enviado`, UPDATE do devedor
 (`status_negociacao='primeira_msg'`, datas de disparo/contato).
 
+## Deploy da Edge Function `admin-usuarios`
+
+Gerência de usuários do painel pelo admin (criar, listar, atualizar papel/
+status/permissões, redefinir senha, remover). A autorização é feita na
+própria função: só executa se o JWT do chamador pertencer a um usuário com
+`role = 'admin'` e `ativo = true` em `fran_usuarios`.
+
+```bash
+supabase functions deploy admin-usuarios
+```
+
+As variáveis `SUPABASE_URL`, `SUPABASE_ANON_KEY` e
+`SUPABASE_SERVICE_ROLE_KEY` são injetadas automaticamente pelo runtime —
+não precisa configurar nada além do deploy. Requer a migração
+`0004_usuarios_perfis.sql` aplicada (tabela `fran_usuarios` + trigger).
+
+### Contrato
+
+**Request** (POST JSON, requer JWT de admin). Campo `action`:
+- `listar` → `{ usuarios: [...] }`
+- `criar` `{ email, password, nome?, role?, recebe_distribuicao?, permissoes? }`
+- `atualizar` `{ id, nome?, role?, ativo?, recebe_distribuicao?, permissoes? }`
+- `resetar_senha` `{ id, password }`
+- `remover` `{ id }` (exclui do auth; o perfil cai por `ON DELETE CASCADE`)
+
+**Salvaguardas**: não permite remover/rebaixar/desativar o último admin
+ativo, nem remover a si mesmo.
+
+**Erros**: `401` não autenticado · `403` chamador não é admin · `404`
+usuário não encontrado · `409` conflito (e-mail já existe, último admin) ·
+`400` validação.
+
 ## Schema do banco (referência)
 
 O schema está ativo no Supabase via UI. Para recriar em outro ambiente,
