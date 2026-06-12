@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAtualizarStatus } from "@/hooks/useDevedorMutations";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import type { Devedor, StatusNegociacao } from "@/lib/types";
 
 const STATUS_OPTIONS: { value: StatusNegociacao; label: string }[] = [
@@ -42,6 +43,7 @@ export function DevedorAcoes({
 }: Props) {
   const { mutateAsync: atualizarStatus, isPending } = useAtualizarStatus();
   const { toast } = useToast();
+  const { isAdmin } = useAuth();
 
   async function handleStatus(status: StatusNegociacao) {
     if (devedor.status_negociacao === status) return;
@@ -111,14 +113,19 @@ export function DevedorAcoes({
             ))}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={() => onRemover(devedor)}
-          className="text-destructive focus:text-destructive"
-        >
-          <Trash2 className="mr-2 h-4 w-4" />
-          Remover devedor
-        </DropdownMenuItem>
+        {/* Remoção é admin-only (RLS de DELETE em fran_devedores). */}
+        {isAdmin && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => onRemover(devedor)}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Remover devedor
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

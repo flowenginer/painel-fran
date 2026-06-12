@@ -25,6 +25,7 @@ import { useEnfileirar } from "@/hooks/useFilaMutations";
 import { useKpis } from "@/hooks/useKpis";
 import { useConfig } from "@/hooks/useConfig";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { horaAtualSaoPaulo } from "@/lib/dates";
 import type { Devedor } from "@/lib/types";
 
@@ -43,6 +44,7 @@ export function Dashboard() {
   const { selecionados, toggle, togglePagina, limpar } = useSelecaoDevedores();
   const enfileirar = useEnfileirar();
   const { toast } = useToast();
+  const { isAdmin } = useAuth();
 
   const [adicionarOpen, setAdicionarOpen] = useState(false);
   const [importarCsvOpen, setImportarCsvOpen] = useState(false);
@@ -157,22 +159,27 @@ export function Dashboard() {
             </strong>{" "}
             disparos restantes hoje
           </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setImportarCsvOpen(true)}
-          >
-            <Upload className="mr-2 h-4 w-4" />
-            Importar CSV
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setAdicionarOpen(true)}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Adicionar Devedor
-          </Button>
+          {/* Ingestão de devedores é admin-only (RLS de INSERT). */}
+          {isAdmin && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setImportarCsvOpen(true)}
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Importar CSV
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAdicionarOpen(true)}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Adicionar Devedor
+              </Button>
+            </>
+          )}
           <Button
             variant="outline"
             size="sm"
