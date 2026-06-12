@@ -15,6 +15,8 @@ import { Separator } from "@/components/ui/separator";
 import { useConfig } from "@/hooks/useConfig";
 import { useSaveConfig } from "@/hooks/useSaveConfig";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { DistribuicaoCard } from "@/components/configuracoes/DistribuicaoCard";
 import { buscarNoCedrus } from "@/lib/cedrus";
 import { supabase } from "@/lib/supabase";
 
@@ -48,6 +50,7 @@ export function Configuracoes() {
   const { data, isLoading } = useConfig();
   const { mutateAsync: salvar, isPending: salvando } = useSaveConfig();
   const { toast } = useToast();
+  const { isAdmin } = useAuth();
 
   const [form, setForm] = useState<FormState>(DEFAULTS);
   const [showApiKey, setShowApiKey] = useState(false);
@@ -418,6 +421,8 @@ export function Configuracoes() {
           </div>
         </CardContent>
       </Card>
+
+      {isAdmin && <DistribuicaoCard />}
 
       <div className="flex justify-end gap-2">
         <Button onClick={handleSalvar} disabled={!sujo || salvando}>
