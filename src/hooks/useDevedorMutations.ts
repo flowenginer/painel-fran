@@ -81,6 +81,7 @@ export function useAtualizarDevedor() {
     mutationFn: atualizarDevedor,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["devedores"] });
+      qc.invalidateQueries({ queryKey: ["conversas"] });
       qc.invalidateQueries({ queryKey: ["kpis"] });
     },
   });
@@ -103,6 +104,7 @@ export function useAtualizarStatus() {
     mutationFn: atualizarStatus,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["devedores"] });
+      qc.invalidateQueries({ queryKey: ["conversas"] });
       qc.invalidateQueries({ queryKey: ["kpis"] });
     },
   });
