@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LogOut, Menu, User as UserIcon } from "lucide-react";
+import { Bell, BellOff, LogOut, Menu, User as UserIcon } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,44 @@ function iniciais(email: string | undefined) {
   if (!email) return "?";
   const nome = email.split("@")[0];
   return nome.slice(0, 2).toUpperCase();
+}
+
+/** Sino para ativar as notificações de desktop (Notification API). */
+function BotaoNotificacao() {
+  const suportado =
+    typeof window !== "undefined" && "Notification" in window;
+  const [perm, setPerm] = useState<NotificationPermission>(
+    suportado ? Notification.permission : "denied"
+  );
+  if (!suportado) return null;
+
+  if (perm === "granted") {
+    return (
+      <Button
+        variant="ghost"
+        size="icon"
+        disabled
+        title="Notificações ativadas"
+      >
+        <Bell className="h-5 w-5 text-primary" />
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      title={
+        perm === "denied"
+          ? "Notificações bloqueadas pelo navegador"
+          : "Ativar notificações de novas mensagens"
+      }
+      onClick={() => void Notification.requestPermission().then(setPerm)}
+    >
+      <BellOff className="h-5 w-5 text-muted-foreground" />
+    </Button>
+  );
 }
 
 export function Header() {
@@ -70,6 +108,8 @@ export function Header() {
       </div>
 
       <div className="flex-1" />
+
+      <BotaoNotificacao />
 
       {/* User menu */}
       <DropdownMenu>
