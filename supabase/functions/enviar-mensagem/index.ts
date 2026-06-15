@@ -133,11 +133,12 @@ Deno.serve(async (req: Request) => {
     const perfilResp = await rest(
       env,
       "GET",
-      `/fran_usuarios?id=eq.${callerId}&select=role,ativo`
+      `/fran_usuarios?id=eq.${callerId}&select=role,ativo,nome`
     );
     const perfil = (await perfilResp.json()) as Array<{
       role: string;
       ativo: boolean;
+      nome: string | null;
     }>;
     const p = perfil[0];
     if (!p || !p.ativo) {
@@ -175,6 +176,10 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Assinatura do operador: prefixa "*Nome:*" (negrito no WhatsApp).
+    const nome = (p.nome ?? "").trim();
+    const textoFinal = nome ? `*${nome}:*\n${texto}` : texto;
+
     // 5. Envia via n8n.
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -190,7 +195,7 @@ Deno.serve(async (req: Request) => {
           acao: "enviar",
           telefone,
           tipo: "texto",
-          texto,
+          texto: textoFinal,
           media_url: null,
         }),
         signal: ctrl.signal,
@@ -206,11 +211,37 @@ Deno.serve(async (req: Request) => {
     }
     clearTimeout(timer);
 
-    if (!resp.ok) {
-      const t = await resp.text().catch(() => "");
+    // Lê o corpo da resposta do n8n para saber o resultado REAL da UAZAPI.
+    const rawTexto = await resp.text().catch(() => "");
+    let rawJson: unknown = null;
+    try {
+      rawJson = rawTexto ? JSON.parse(rawTexto) : null;
+    } catch {
+      rawJson = null;
+    }
+    // n8n às vezes devolve um array com 1 item — desencapsula.
+    const corpo = (Array.isArray(rawJson) ? rawJson[0] : rawJson) as
+      | Record<string, unknown>
+      | null;
+
+    // Falha se: HTTP não-ok, OU o corpo indica erro (ok=false / erro / error).
+    // A branch n8n DEVE propagar a falha da UAZAPI (não responder ok cego).
+    const indicaErro =
+      !!corpo &&
+      (corpo.ok === false ||
+        corpo.success === false ||
+        Boolean(corpo.erro) ||
+        Boolean(corpo.error));
+    if (!resp.ok || indicaErro) {
+      const motivo =
+        (corpo &&
+          (corpo.erro || corpo.error) &&
+          String(corpo.erro ?? corpo.error)) ||
+        `Falha no envio (HTTP ${resp.status})`;
+      // NÃO grava na thread — a mensagem não chegou ao lead.
       return jsonResponse(
-        { error: `n8n retornou HTTP ${resp.status}`, detail: t.slice(0, 300) },
-        502
+        { ok: false, error: `Não enviado: ${motivo}` },
+        200
       );
     }
 
@@ -221,7 +252,7 @@ Deno.serve(async (req: Request) => {
       "/fran_memory",
       {
         session_id: telefone,
-        message: { type: "ai", content: texto, additional_kwargs: {} },
+        message: { type: "ai", content: textoFinal, additional_kwargs: {} },
         enviado_por: callerId,
       },
       { Prefer: "return=minimal" }

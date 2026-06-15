@@ -1,4 +1,5 @@
-import { Image as ImageIcon, Mic, Video, FileText } from "lucide-react";
+import { Image as ImageIcon, Mic, Video, FileText, Check } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 import { detectarMidia, type MensagemParsed } from "@/lib/conversas";
@@ -27,19 +28,28 @@ function formatHora(iso: string | null): string {
   }).format(d);
 }
 
+// Renderiza *negrito* no estilo WhatsApp (usado na assinatura "*Nome:*").
+function renderConteudo(content: string): ReactNode {
+  const partes = content.split(/(\*[^*\n]+\*)/g);
+  return partes.map((parte, i) => {
+    if (/^\*[^*\n]+\*$/.test(parte)) {
+      return <strong key={i}>{parte.slice(1, -1)}</strong>;
+    }
+    return <span key={i}>{parte}</span>;
+  });
+}
+
 export function MensagemBubble({ mensagem, autorNome }: Props) {
   // "ai" = mensagem nossa (Fran ou operadora) → direita/azul.
   // "human" = mensagem do lead → esquerda/cinza.
   const ehNosso = mensagem.type === "ai";
+  const ehOperadora = ehNosso && !!mensagem.enviado_por;
   const midia = detectarMidia(mensagem.content);
   const meta = midia ? ICONES_MIDIA[midia] : null;
   const hora = formatHora(mensagem.created_at);
 
-  const autor = ehNosso
-    ? mensagem.enviado_por
-      ? autorNome || "Operadora"
-      : "Fran"
-    : "Devedor";
+  // Rótulo: operadora não mostra (a assinatura "*Nome:*" já vai no texto).
+  const label = ehNosso ? (ehOperadora ? null : "Fran") : "Devedor";
 
   return (
     <div className={cn("flex w-full", ehNosso ? "justify-end" : "justify-start")}>
@@ -51,14 +61,16 @@ export function MensagemBubble({ mensagem, autorNome }: Props) {
             : "rounded-tl-sm bg-muted text-foreground"
         )}
       >
-        <div
-          className={cn(
-            "mb-0.5 text-[10px] font-medium uppercase tracking-wide",
-            ehNosso ? "text-primary-foreground/70" : "text-muted-foreground"
-          )}
-        >
-          {autor}
-        </div>
+        {label && (
+          <div
+            className={cn(
+              "mb-0.5 text-[10px] font-medium uppercase tracking-wide",
+              ehNosso ? "text-primary-foreground/70" : "text-muted-foreground"
+            )}
+          >
+            {label}
+          </div>
+        )}
         {meta ? (
           <div className="flex items-center gap-2 italic opacity-90">
             <meta.Icon className="h-4 w-4 shrink-0" />
@@ -66,21 +78,26 @@ export function MensagemBubble({ mensagem, autorNome }: Props) {
           </div>
         ) : (
           <div className="whitespace-pre-wrap break-words">
-            {mensagem.content || (
+            {mensagem.content ? (
+              renderConteudo(mensagem.content)
+            ) : (
               <span className="italic opacity-60">(sem conteúdo)</span>
             )}
           </div>
         )}
-        {hora && (
-          <div
-            className={cn(
-              "mt-0.5 text-right text-[10px]",
-              ehNosso ? "text-primary-foreground/60" : "text-muted-foreground"
-            )}
-          >
-            {hora}
-          </div>
-        )}
+        <div
+          className={cn(
+            "mt-0.5 flex items-center justify-end gap-1 text-[10px]",
+            ehNosso ? "text-primary-foreground/60" : "text-muted-foreground"
+          )}
+        >
+          {autorNome && ehOperadora && (
+            <span className="mr-auto opacity-80">{autorNome}</span>
+          )}
+          {hora && <span>{hora}</span>}
+          {/* Enviado (✓). Entregue/lido dependem de receipts da UAZAPI. */}
+          {ehOperadora && <Check className="h-3 w-3" />}
+        </div>
       </div>
     </div>
   );

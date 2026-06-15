@@ -5,6 +5,7 @@ export interface EnviarMensagemResp {
   ok: boolean;
   gravado?: boolean;
   aviso?: string;
+  error?: string;
 }
 
 export async function enviarMensagem(
@@ -43,5 +44,9 @@ export async function enviarMensagem(
     );
   }
   if (!data) throw new Error("Resposta vazia");
+  // Falha "de negócio" (ex.: UAZAPI recusou) vem como ok:false em HTTP 200.
+  if (data.ok === false) {
+    throw new Error(data.error ?? "Falha no envio");
+  }
   return data;
 }

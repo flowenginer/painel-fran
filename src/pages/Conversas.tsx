@@ -68,8 +68,8 @@ export function Conversas() {
   }, [conversas, filtroStatus, filtroData]);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 flex-col gap-2 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Conversas</h1>
           <p className="text-sm text-muted-foreground">
@@ -130,8 +130,8 @@ export function Conversas() {
         </div>
       </div>
 
-      {/* Layout CRM: lista | thread | painel do lead */}
-      <div className="grid h-[calc(100vh-220px)] min-h-[520px] grid-cols-1 grid-rows-[1fr] overflow-hidden rounded-md border md:grid-cols-[320px_1fr] lg:grid-cols-[320px_1fr_320px]">
+      {/* Layout CRM: lista | thread | painel do lead (ocupa a tela toda) */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[1fr] overflow-hidden md:grid-cols-[320px_1fr] lg:grid-cols-[320px_1fr_340px]">
         <div className="min-h-0 overflow-hidden">
           <ListaConversas
             conversas={filtradas}
