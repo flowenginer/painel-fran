@@ -360,8 +360,19 @@ A função faz `POST` no **mesmo webhook** do `uazapi-proxy`, com header
 No workflow "Painel ⇄ UAZAPI", adicione no `Switch (acao)` o caso
 **`enviar`** → nó que chama o endpoint de envio da UAZAPI (ex.:
 `POST /send/text` com `{ number, text }` + `token` da instância) →
-`Respond to Webhook` com `{ "ok": true }`. Na Fase B usaremos `tipo`
-= imagem/audio/documento + `media_url`.
+`Respond to Webhook`. Na Fase B usaremos `tipo` = imagem/audio/documento +
+`media_url`.
+
+**IMPORTANTE — propague o resultado real da UAZAPI.** A função só grava a
+mensagem na thread quando o envio dá certo. Então:
+- Sucesso → responda `{ "ok": true }`.
+- Falha (ex.: número desconectado, UAZAPI 4xx/5xx) → responda
+  `{ "ok": false, "erro": "<motivo>" }` **ou** com HTTP ≥ 400.
+
+Se a branch responder `ok` "cego" mesmo quando a UAZAPI falha, o painel vai
+marcar como enviada uma mensagem que não chegou. Dica no n8n: deixe o nó
+HTTP da UAZAPI com "Continue On Fail" e use um `IF`/`Set` para montar a
+resposta de erro a partir do status retornado.
 
 ## Schema do banco (referência)
 
