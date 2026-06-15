@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -17,6 +16,8 @@ import { useOperadores } from "@/hooks/useOperadores";
 import { ListaConversas } from "@/components/conversas/ListaConversas";
 import { ThreadMensagens } from "@/components/conversas/ThreadMensagens";
 import { LeadPanel } from "@/components/conversas/LeadPanel";
+import { FiltroPeriodo } from "@/components/conversas/FiltroPeriodo";
+import { dentroDoPeriodo, type Periodo } from "@/lib/periodo";
 import type { StatusNegociacao } from "@/lib/types";
 
 const TODOS = "todos";
@@ -39,7 +40,7 @@ export function Conversas() {
   const { data: operadores } = useOperadores();
   const [filtroResp, setFiltroResp] = useState<string>(TODOS);
   const [filtroStatus, setFiltroStatus] = useState<string>(TODOS);
-  const [filtroData, setFiltroData] = useState<string>("");
+  const [periodo, setPeriodo] = useState<Periodo>({ tipo: "todas" });
 
   const { data, isLoading, isFetching, refetch } = useConversas(
     isAdmin && filtroResp !== TODOS ? filtroResp : null
@@ -50,22 +51,38 @@ export function Conversas() {
   // O thread selecionado persiste mesmo que os filtros o escondam da lista.
   const ativa = conversas.find((c) => c.telefone_normalizado === selecionada);
 
-  const filtradas = useMemo(() => {
-    const inicioData = filtroData
-      ? new Date(`${filtroData}T00:00:00-03:00`).getTime()
-      : null;
-    return conversas.filter((c) => {
-      if (filtroStatus !== TODOS) {
-        if (c.devedor?.status_negociacao !== filtroStatus) return false;
-      }
-      if (inicioData != null) {
-        const iso = c.ultima_mensagem?.created_at;
-        if (!iso) return false;
-        if (new Date(iso).getTime() < inicioData) return false;
-      }
-      return true;
-    });
-  }, [conversas, filtroStatus, filtroData]);
+  // Aplica o filtro de status primeiro; a contagem por período é feita
+  // sobre essa base (para os números baterem com o que a data vai mostrar).
+  const porStatus = useMemo(
+    () =>
+      filtroStatus === TODOS
+        ? conversas
+        : conversas.filter(
+            (c) => c.devedor?.status_negociacao === filtroStatus
+          ),
+    [conversas, filtroStatus]
+  );
+
+  const counts = useMemo(() => {
+    const conta = (p: Periodo) =>
+      porStatus.filter((c) =>
+        dentroDoPeriodo(c.ultima_mensagem?.created_at, p)
+      ).length;
+    return {
+      total: porStatus.length,
+      hoje: conta({ tipo: "hoje" }),
+      ontem: conta({ tipo: "ontem" }),
+      semana: conta({ tipo: "semana" }),
+    };
+  }, [porStatus]);
+
+  const filtradas = useMemo(
+    () =>
+      porStatus.filter((c) =>
+        dentroDoPeriodo(c.ultima_mensagem?.created_at, periodo)
+      ),
+    [porStatus, periodo]
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -107,12 +124,10 @@ export function Conversas() {
               ))}
             </SelectContent>
           </Select>
-          <Input
-            type="date"
-            value={filtroData}
-            onChange={(e) => setFiltroData(e.target.value)}
-            className="h-9 w-[150px]"
-            title="Mostrar conversas com mensagem a partir desta data"
+          <FiltroPeriodo
+            value={periodo}
+            onChange={setPeriodo}
+            counts={counts}
           />
           <Button
             variant="outline"
