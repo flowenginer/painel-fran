@@ -180,10 +180,7 @@ export function ThreadMensagens({ conversa }: Props) {
             <StatusBadge status={conversa.devedor.status_negociacao} />
           )}
           {iaBloqueada && (
-            <Badge
-              variant="outline"
-              className="gap-1 border-destructive/40 bg-destructive/10 text-[10px] text-destructive"
-            >
+            <Badge className="gap-1 bg-destructive text-[10px] text-destructive-foreground hover:bg-destructive">
               <Ban className="h-3 w-3" />
               IA bloqueada
             </Badge>
