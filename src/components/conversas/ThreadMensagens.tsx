@@ -40,6 +40,10 @@ import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { MensagemBubble } from "./MensagemBubble";
 import { Composer } from "./Composer";
 import { TransferirConversaDialog } from "./TransferirConversaDialog";
+import {
+  VisualizadorMidia,
+  type MidiaAberta,
+} from "./VisualizadorMidia";
 import type { ConversaItem } from "@/hooks/useConversas";
 
 interface Props {
@@ -67,6 +71,7 @@ export function ThreadMensagens({ conversa }: Props) {
 
   const [confirmandoToggle, setConfirmandoToggle] = useState(false);
   const [transferindo, setTransferindo] = useState(false);
+  const [midiaAberta, setMidiaAberta] = useState<MidiaAberta | null>(null);
   const { mutateAsync: toggleBlock, isPending: alterandoBlock } =
     useToggleBlockIA();
   const { toast } = useToast();
@@ -250,6 +255,7 @@ export function ThreadMensagens({ conversa }: Props) {
               key={m.id}
               mensagem={m}
               autorNome={nomeOperador(operadores, m.enviado_por)}
+              onAbrirMidia={setMidiaAberta}
             />
           ))}
       </div>
@@ -337,6 +343,9 @@ export function ThreadMensagens({ conversa }: Props) {
           operadores={operadores ?? []}
         />
       )}
+
+      {/* Visualizador de mídia (imagem/PDF) dentro do sistema */}
+      <VisualizadorMidia midia={midiaAberta} onClose={() => setMidiaAberta(null)} />
     </div>
   );
 }
