@@ -1,20 +1,45 @@
+import { useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
+import { cn } from "@/lib/utils";
+import { useNotificacoesMensagens } from "@/hooks/useNotificacoesMensagens";
 import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
+
+const STORAGE_KEY = "sidebar-colapsada";
 
 export function AppLayout() {
   const { pathname } = useLocation();
   // Conversas (CRM chat) ocupa a tela inteira, sem o container central.
   const fullBleed = pathname.startsWith("/conversas");
 
+  const [colapsado, setColapsado] = useState(
+    () => localStorage.getItem(STORAGE_KEY) === "1"
+  );
+
+  function toggleSidebar() {
+    setColapsado((v) => {
+      const novo = !v;
+      localStorage.setItem(STORAGE_KEY, novo ? "1" : "0");
+      return novo;
+    });
+  }
+
+  // Notificações de desktop para novas mensagens (em qualquer página).
+  useNotificacoesMensagens();
+
   return (
     <div className="flex h-screen min-h-0 flex-col">
       <Header />
       <div className="flex min-h-0 flex-1">
         {/* Sidebar fixa em desktop; mobile usa o Sheet no Header */}
-        <aside className="hidden w-60 shrink-0 border-r md:block">
-          <Sidebar />
+        <aside
+          className={cn(
+            "hidden shrink-0 border-r transition-[width] duration-200 md:block",
+            colapsado ? "w-16" : "w-60"
+          )}
+        >
+          <Sidebar colapsado={colapsado} onToggle={toggleSidebar} />
         </aside>
         <main className="min-h-0 flex-1 overflow-x-hidden">
           {fullBleed ? (
