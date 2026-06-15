@@ -58,6 +58,12 @@ export interface MensagemParsed {
   created_at: string | null;
   /** Operadora que enviou pelo painel (null = IA/lead). */
   enviado_por: string | null;
+  /** Mídia (vinda de additional_kwargs.media_*). null = sem mídia. */
+  media_url: string | null;
+  media_tipo: string | null;
+  media_mime: string | null;
+  media_nome: string | null;
+  transcricao: string | null;
 }
 
 /** Retorna só os dígitos do telefone/session_id. */
@@ -107,6 +113,8 @@ export function parsearMensagem(row: FranMemoryRow): MensagemParsed {
     payload = null;
   }
 
+  const ak = (payload?.additional_kwargs ?? {}) as Record<string, unknown>;
+
   return {
     id: row.id,
     session_id: row.session_id ?? "",
@@ -118,7 +126,17 @@ export function parsearMensagem(row: FranMemoryRow): MensagemParsed {
       : false,
     created_at: row.created_at ?? null,
     enviado_por: row.enviado_por ?? null,
+    media_url: lerStr(ak.media_url),
+    media_tipo: lerStr(ak.media_tipo),
+    media_mime: lerStr(ak.media_mime),
+    media_nome: lerStr(ak.media_nome),
+    transcricao: lerStr(ak.transcricao),
   };
+}
+
+/** Lê um campo string não-vazio de um objeto desconhecido. */
+function lerStr(v: unknown): string | null {
+  return typeof v === "string" && v.trim() ? v : null;
 }
 
 /**
@@ -141,7 +159,7 @@ export function ehMensagemVisivel(m: MensagemParsed): boolean {
   if (m.type === "ai" && m.tem_tool_call) return false;
   if (m.type !== "ai" && m.type !== "human") return false;
   if (ehMensagemAutomacao(m.content)) return false;
-  return Boolean(m.content);
+  return Boolean(m.content) || Boolean(m.media_url);
 }
 
 /** Detecta placeholders de mídia no conteúdo. */

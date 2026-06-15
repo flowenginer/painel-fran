@@ -39,13 +39,63 @@ function renderConteudo(content: string): ReactNode {
   });
 }
 
+// Tipo de mídia: usa media_tipo se vier; senão deduz pelo mime.
+function tipoMidia(m: MensagemParsed): "audio" | "imagem" | "documento" | "video" {
+  const t = (m.media_tipo || "").toLowerCase();
+  if (t === "audio" || t === "imagem" || t === "documento" || t === "video") {
+    return t;
+  }
+  const mime = (m.media_mime || "").toLowerCase();
+  if (mime.startsWith("audio")) return "audio";
+  if (mime.startsWith("image")) return "imagem";
+  if (mime.startsWith("video")) return "video";
+  return "documento";
+}
+
+function RenderMidia({ m }: { m: MensagemParsed }) {
+  const url = m.media_url as string;
+  const tipo = tipoMidia(m);
+
+  if (tipo === "audio") {
+    return <audio controls preload="metadata" src={url} className="w-60 max-w-full" />;
+  }
+  if (tipo === "imagem") {
+    return (
+      <a href={url} target="_blank" rel="noreferrer">
+        <img
+          src={url}
+          alt="imagem"
+          className="max-h-64 max-w-full rounded-md object-contain"
+        />
+      </a>
+    );
+  }
+  if (tipo === "video") {
+    return (
+      <video controls src={url} className="max-h-64 max-w-full rounded-md" />
+    );
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm underline-offset-2 hover:underline"
+    >
+      <FileText className="h-4 w-4 shrink-0" />
+      {m.media_nome || "Abrir documento"}
+    </a>
+  );
+}
+
 export function MensagemBubble({ mensagem, autorNome }: Props) {
   // "ai" = mensagem nossa (Fran ou operadora) → direita/azul.
   // "human" = mensagem do lead → esquerda/cinza.
   const ehNosso = mensagem.type === "ai";
   const ehOperadora = ehNosso && !!mensagem.enviado_por;
-  const midia = detectarMidia(mensagem.content);
-  const meta = midia ? ICONES_MIDIA[midia] : null;
+  const temMidia = !!mensagem.media_url;
+  const placeholder = temMidia ? null : detectarMidia(mensagem.content);
+  const meta = placeholder ? ICONES_MIDIA[placeholder] : null;
   const hora = formatHora(mensagem.created_at);
 
   // Rótulo: operadora não mostra (a assinatura "*Nome:*" já vai no texto).
@@ -71,7 +121,17 @@ export function MensagemBubble({ mensagem, autorNome }: Props) {
             {label}
           </div>
         )}
-        {meta ? (
+
+        {temMidia ? (
+          <div className="space-y-1">
+            <RenderMidia m={mensagem} />
+            {mensagem.transcricao && (
+              <p className="text-xs italic opacity-80">
+                “{mensagem.transcricao}”
+              </p>
+            )}
+          </div>
+        ) : meta ? (
           <div className="flex items-center gap-2 italic opacity-90">
             <meta.Icon className="h-4 w-4 shrink-0" />
             <span>[{meta.label}]</span>
@@ -85,6 +145,7 @@ export function MensagemBubble({ mensagem, autorNome }: Props) {
             )}
           </div>
         )}
+
         <div
           className={cn(
             "mt-0.5 flex items-center justify-end gap-1 text-[10px]",
