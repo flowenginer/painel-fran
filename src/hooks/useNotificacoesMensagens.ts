@@ -24,6 +24,32 @@ function resolverNome(
   return c?.devedor?.nome_devedor || `+${telefoneNorm}`;
 }
 
+/** Beep curto via WebAudio (não depende do som do SO na notificação). */
+function tocarBeep() {
+  try {
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0015, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.35);
+    osc.onended = () => ctx.close();
+  } catch {
+    /* sem áudio disponível */
+  }
+}
+
 export function useNotificacoesMensagens() {
   const qc = useQueryClient();
 
@@ -64,11 +90,15 @@ export function useNotificacoesMensagens() {
             const n = new Notification(`Nova mensagem — ${nome}`, {
               body: previewContent(m.content, 90),
               tag: m.session_id_normalizado,
-            });
+              // Re-alerta mesmo quando já existe uma notificação da mesma
+              // conversa (senão o Chrome substitui em silêncio).
+              renotify: true,
+            } as NotificationOptions);
             n.onclick = () => {
               window.focus();
               n.close();
             };
+            tocarBeep();
             document.title = "🔔 Nova mensagem";
           } catch {
             /* ignora falhas de Notification */
