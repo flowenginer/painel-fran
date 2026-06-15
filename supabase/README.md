@@ -325,6 +325,44 @@ ativo, nem remover a si mesmo.
 usuário não encontrado · `409` conflito (e-mail já existe, último admin) ·
 `400` validação.
 
+## Deploy da Edge Function `enviar-mensagem`
+
+CRM chat (Fase A): envia uma mensagem da operadora para o lead via n8n →
+UAZAPI e grava a mensagem na `fran_memory` (para aparecer na thread).
+Autossuficiente — pode ser colada no editor do Dashboard, sem CLI.
+
+```bash
+supabase functions deploy enviar-mensagem
+```
+
+Requer a migração `0009_crm_mensagens.sql` (colunas `created_at` e
+`enviado_por` em `fran_memory`) e as configs `uazapi_webhook_url` /
+`uazapi_webhook_secret` (as mesmas do `uazapi-proxy`).
+
+**Autorização:** só a operadora dona da conversa (via `fran_conversas`) ou
+um admin pode enviar.
+
+### Contrato com o n8n (branch nova `enviar`)
+
+A função faz `POST` no **mesmo webhook** do `uazapi-proxy`, com header
+`X-Painel-Secret`, no corpo:
+
+```json
+{
+  "acao": "enviar",
+  "telefone": "5511933352405",
+  "tipo": "texto",
+  "texto": "mensagem da operadora",
+  "media_url": null
+}
+```
+
+No workflow "Painel ⇄ UAZAPI", adicione no `Switch (acao)` o caso
+**`enviar`** → nó que chama o endpoint de envio da UAZAPI (ex.:
+`POST /send/text` com `{ number, text }` + `token` da instância) →
+`Respond to Webhook` com `{ "ok": true }`. Na Fase B usaremos `tipo`
+= imagem/audio/documento + `media_url`.
+
 ## Schema do banco (referência)
 
 O schema está ativo no Supabase via UI. Para recriar em outro ambiente,

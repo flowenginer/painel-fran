@@ -17,6 +17,10 @@ export interface FranMemoryRow {
   id: number;
   session_id: string;
   message: string | Record<string, unknown>;
+  /** Data/hora da mensagem (coluna nova; null em linhas antigas). */
+  created_at?: string | null;
+  /** Operadora que enviou pelo painel (null = IA/sistema/lead). */
+  enviado_por?: string | null;
 }
 
 export type TipoMensagem =
@@ -50,6 +54,10 @@ export interface MensagemParsed {
   type: TipoMensagem;
   content: string;
   tem_tool_call: boolean;
+  /** Data/hora (ISO) — null em mensagens antigas sem carimbo. */
+  created_at: string | null;
+  /** Operadora que enviou pelo painel (null = IA/lead). */
+  enviado_por: string | null;
 }
 
 /** Retorna só os dígitos do telefone/session_id. */
@@ -108,6 +116,8 @@ export function parsearMensagem(row: FranMemoryRow): MensagemParsed {
     tem_tool_call: Array.isArray(payload?.tool_calls)
       ? payload.tool_calls.length > 0
       : false,
+    created_at: row.created_at ?? null,
+    enviado_por: row.enviado_por ?? null,
   };
 }
 

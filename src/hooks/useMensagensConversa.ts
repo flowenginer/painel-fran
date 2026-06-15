@@ -26,7 +26,7 @@ async function fetchMensagens(
   const todos = await fetchAllPages<FranMemoryRow>(() =>
     supabase
       .from("fran_memory")
-      .select("id, session_id, message")
+      .select("id, session_id, message, created_at, enviado_por")
       .ilike("session_id", `%${numeroSem55}%`)
       .order("id", { ascending: true })
   );
