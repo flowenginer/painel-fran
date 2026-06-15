@@ -16,12 +16,15 @@ interface Props {
 
 export function VisualizadorMidia({ midia, onClose }: Props) {
   const ehImagem = midia?.tipo === "imagem";
-  const ehPdf =
-    !!midia &&
-    (midia.tipo === "documento"
-      ? (midia.mime || "").includes("pdf") ||
-        (midia.url || "").toLowerCase().includes(".pdf")
-      : false);
+  const ehDocumento = midia?.tipo === "documento";
+  // O servidor da UAZAPI recusa ser embutido em iframe (X-Frame-Options).
+  // Usamos o visualizador do Google como proxy — funciona com qualquer URL
+  // pública (pdf, doc, docx, xls...) e renderiza dentro do sistema.
+  const visualizadorDoc = midia
+    ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(
+        midia.url
+      )}`
+    : "";
 
   return (
     <Dialog open={!!midia} onOpenChange={(o) => !o && onClose()}>
@@ -34,17 +37,15 @@ export function VisualizadorMidia({ midia, onClose }: Props) {
                 alt={midia.nome || "imagem"}
                 className="mx-auto max-h-[78vh] w-full rounded-md object-contain"
               />
-            ) : ehPdf ? (
+            ) : ehDocumento ? (
               <iframe
-                src={midia.url}
+                src={visualizadorDoc}
                 title={midia.nome || "documento"}
-                className="h-[78vh] w-full rounded-md border"
+                className="h-[78vh] w-full rounded-md border bg-white"
               />
             ) : (
               <div className="flex flex-col items-center gap-3 py-10 text-center text-sm text-muted-foreground">
-                <p>
-                  Este tipo de arquivo não pode ser pré-visualizado aqui.
-                </p>
+                <p>Este tipo de arquivo não pode ser pré-visualizado aqui.</p>
               </div>
             )}
 
