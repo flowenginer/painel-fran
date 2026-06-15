@@ -20,6 +20,8 @@ interface Props {
   /** Mostra o operador responsável em cada item (visão de admin). */
   mostrarResponsavel?: boolean;
   operadores?: OperadorLite[];
+  /** Retorna true quando a conversa tem mensagem nova do lead (não lida). */
+  naoLida?: (c: ConversaItem) => boolean;
 }
 
 function iniciais(nome: string | null | undefined): string {
@@ -40,6 +42,7 @@ export function ListaConversas({
   isLoading,
   mostrarResponsavel = false,
   operadores,
+  naoLida,
 }: Props) {
   const [busca, setBusca] = useState("");
 
@@ -97,6 +100,7 @@ export function ListaConversas({
         <ul className="divide-y">
           {filtradas.map((c) => {
             const ativo = c.telefone_normalizado === selecionada;
+            const nova = naoLida?.(c) ?? false;
             const nomeExibido =
               c.devedor?.nome_devedor ??
               (c.telefone_normalizado
@@ -109,7 +113,8 @@ export function ListaConversas({
                   onClick={() => onSelecionar(c.telefone_normalizado)}
                   className={cn(
                     "flex w-full items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-accent",
-                    ativo && "bg-accent"
+                    ativo && "bg-accent",
+                    nova && !ativo && "bg-green-500/10"
                   )}
                 >
                   <Avatar className="h-10 w-10 shrink-0">
@@ -117,14 +122,27 @@ export function ListaConversas({
                   </Avatar>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium">
+                      <span
+                        className={cn(
+                          "truncate text-sm",
+                          nova ? "font-bold text-foreground" : "font-medium"
+                        )}
+                      >
                         {nomeExibido}
                       </span>
-                      {c.ultima_mensagem && (
-                        <span className="shrink-0 text-[10px] text-muted-foreground">
-                          #{c.ultima_mensagem.id}
-                        </span>
-                      )}
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        {nova && (
+                          <span
+                            className="h-2.5 w-2.5 rounded-full bg-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.2)]"
+                            title="Mensagem nova"
+                          />
+                        )}
+                        {c.ultima_mensagem && (
+                          <span className="text-[10px] text-muted-foreground">
+                            #{c.ultima_mensagem.id}
+                          </span>
+                        )}
+                      </span>
                     </div>
                     <p className="truncate text-xs text-muted-foreground">
                       {c.devedor
@@ -158,7 +176,14 @@ export function ListaConversas({
                       )}
                     </div>
                     {c.ultima_mensagem ? (
-                      <p className="mt-1 truncate text-xs text-muted-foreground">
+                      <p
+                        className={cn(
+                          "mt-1 truncate text-xs",
+                          nova
+                            ? "font-medium text-foreground"
+                            : "text-muted-foreground"
+                        )}
+                      >
                         <span
                           className={cn(
                             "font-medium",
