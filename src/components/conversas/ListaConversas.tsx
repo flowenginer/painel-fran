@@ -35,6 +35,18 @@ function iniciais(nome: string | null | undefined): string {
     .toUpperCase();
 }
 
+/** Hora curta (HH:mm) da mensagem, no fuso de São Paulo. */
+function horaCurta(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(d);
+}
+
 export function ListaConversas({
   conversas,
   selecionada,
@@ -137,9 +149,9 @@ export function ListaConversas({
                             title="Mensagem nova"
                           />
                         )}
-                        {c.ultima_mensagem && (
+                        {c.ultima_mensagem?.created_at && (
                           <span className="text-[10px] text-muted-foreground">
-                            #{c.ultima_mensagem.id}
+                            {horaCurta(c.ultima_mensagem.created_at)}
                           </span>
                         )}
                       </span>
@@ -167,7 +179,7 @@ export function ListaConversas({
                       )}
                       {c.devedor?.status === STATUS_BLOCK_IA && (
                         <span
-                          className="inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive"
+                          className="inline-flex items-center gap-1 rounded-full bg-destructive px-2 py-0.5 text-[10px] font-medium text-destructive-foreground"
                           title="IA bloqueada para este devedor"
                         >
                           <Ban className="h-3 w-3" />
