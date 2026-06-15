@@ -30,9 +30,12 @@ export function PermissionRoute({
   adminOnly,
   children,
 }: PermissionRouteProps) {
-  const { isAdmin, temPermissao, perfilLoading } = useAuth();
+  const { isAdmin, temPermissao, perfilLoading, perfil } = useAuth();
 
-  if (perfilLoading) {
+  // Só bloqueia na carga INICIAL (sem perfil ainda). Recargas posteriores
+  // (ex.: refresh de token ao voltar para a aba) não desmontam a página —
+  // isso fechava a conversa aberta nas Conversas.
+  if (perfilLoading && !perfil) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -64,10 +67,10 @@ export function PermissionRoute({
  * Útil para operadores que não têm acesso ao Dashboard.
  */
 export function RedirecionarInicio() {
-  const { perfilLoading } = useAuth();
+  const { perfilLoading, perfil } = useAuth();
   const destino = usePrimeiraPaginaPermitida();
 
-  if (perfilLoading) {
+  if (perfilLoading && !perfil) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />

@@ -3,11 +3,14 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 import { detectarMidia, type MensagemParsed } from "@/lib/conversas";
+import type { MidiaAberta } from "./VisualizadorMidia";
 
 interface Props {
   mensagem: MensagemParsed;
   /** Nome da operadora que enviou (quando enviado_por estiver setado). */
   autorNome?: string | null;
+  /** Abre imagem/documento no visualizador interno (modal). */
+  onAbrirMidia?: (midia: MidiaAberta) => void;
 }
 
 const ICONES_MIDIA = {
@@ -52,7 +55,13 @@ function tipoMidia(m: MensagemParsed): "audio" | "imagem" | "documento" | "video
   return "documento";
 }
 
-function RenderMidia({ m }: { m: MensagemParsed }) {
+function RenderMidia({
+  m,
+  onAbrirMidia,
+}: {
+  m: MensagemParsed;
+  onAbrirMidia?: (midia: MidiaAberta) => void;
+}) {
   const url = m.media_url as string;
   const tipo = tipoMidia(m);
 
@@ -61,13 +70,20 @@ function RenderMidia({ m }: { m: MensagemParsed }) {
   }
   if (tipo === "imagem") {
     return (
-      <a href={url} target="_blank" rel="noreferrer">
+      <button
+        type="button"
+        onClick={() =>
+          onAbrirMidia?.({ url, tipo, nome: m.media_nome, mime: m.media_mime })
+        }
+        className="block"
+        title="Ampliar"
+      >
         <img
           src={url}
           alt="imagem"
-          className="max-h-64 max-w-full rounded-md object-contain"
+          className="max-h-64 max-w-full cursor-pointer rounded-md object-contain"
         />
-      </a>
+      </button>
     );
   }
   if (tipo === "video") {
@@ -76,19 +92,20 @@ function RenderMidia({ m }: { m: MensagemParsed }) {
     );
   }
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm underline-offset-2 hover:underline"
+    <button
+      type="button"
+      onClick={() =>
+        onAbrirMidia?.({ url, tipo, nome: m.media_nome, mime: m.media_mime })
+      }
+      className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent/40"
     >
       <FileText className="h-4 w-4 shrink-0" />
       {m.media_nome || "Abrir documento"}
-    </a>
+    </button>
   );
 }
 
-export function MensagemBubble({ mensagem, autorNome }: Props) {
+export function MensagemBubble({ mensagem, autorNome, onAbrirMidia }: Props) {
   // "ai" = mensagem nossa (Fran ou operadora) → direita/azul.
   // "human" = mensagem do lead → esquerda/cinza.
   const ehNosso = mensagem.type === "ai";
@@ -124,7 +141,7 @@ export function MensagemBubble({ mensagem, autorNome }: Props) {
 
         {temMidia ? (
           <div className="space-y-1">
-            <RenderMidia m={mensagem} />
+            <RenderMidia m={mensagem} onAbrirMidia={onAbrirMidia} />
             {mensagem.transcricao && (
               <p className="text-xs italic opacity-80">
                 “{mensagem.transcricao}”
