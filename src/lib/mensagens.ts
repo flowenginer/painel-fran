@@ -1,4 +1,4 @@
-// Cliente da Edge Function enviar-mensagem (CRM chat — Fase A: texto).
+// Cliente da Edge Function enviar-mensagem (CRM chat: texto e mídia).
 import { supabase } from "./supabase";
 
 export interface EnviarMensagemResp {
@@ -8,9 +8,17 @@ export interface EnviarMensagemResp {
   error?: string;
 }
 
+export type TipoEnvio = "texto" | "imagem" | "audio" | "documento";
+
+export interface EnviarInput {
+  telefone: string;
+  texto?: string;
+  tipo?: TipoEnvio;
+  media_url?: string | null;
+}
+
 export async function enviarMensagem(
-  telefone: string,
-  texto: string
+  input: EnviarInput
 ): Promise<EnviarMensagemResp> {
   const {
     data: { session },
@@ -22,7 +30,12 @@ export async function enviarMensagem(
   const { data, error } = await supabase.functions.invoke<EnviarMensagemResp>(
     "enviar-mensagem",
     {
-      body: { telefone, texto },
+      body: {
+        telefone: input.telefone,
+        texto: input.texto ?? "",
+        tipo: input.tipo ?? "texto",
+        media_url: input.media_url ?? null,
+      },
       headers: { Authorization: `Bearer ${session.access_token}` },
     }
   );

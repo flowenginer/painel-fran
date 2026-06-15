@@ -1,20 +1,26 @@
-// Mutation de envio de mensagem do CRM. Após enviar, invalida a thread e a
-// lista de conversas para refletir a mensagem nova.
+// Mutation de envio de mensagem do CRM (texto e mídia). Após enviar, invalida
+// a thread e a lista de conversas para refletir a mensagem nova.
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { enviarMensagem } from "@/lib/mensagens";
+import { enviarMensagem, type TipoEnvio } from "@/lib/mensagens";
 import { useToast } from "@/hooks/use-toast";
+
+export interface EnviarMensagemArgs {
+  texto?: string;
+  tipo?: TipoEnvio;
+  media_url?: string | null;
+}
 
 export function useEnviarMensagem(telefoneNormalizado: string | null) {
   const qc = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: (texto: string) => {
+    mutationFn: (args: EnviarMensagemArgs) => {
       if (!telefoneNormalizado) {
         throw new Error("Conversa sem telefone válido.");
       }
-      return enviarMensagem(telefoneNormalizado, texto);
+      return enviarMensagem({ telefone: telefoneNormalizado, ...args });
     },
     onSuccess: (resp) => {
       void qc.invalidateQueries({ queryKey: ["conversa", telefoneNormalizado] });
