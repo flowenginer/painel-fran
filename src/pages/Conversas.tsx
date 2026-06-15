@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { useConversas } from "@/hooks/useConversas";
 import { useConversasRealtime } from "@/hooks/useConversasRealtime";
 import { useAuth } from "@/hooks/useAuth";
 import { useOperadores } from "@/hooks/useOperadores";
+import { useLeituraConversas } from "@/hooks/useLeituraConversas";
 import { ListaConversas } from "@/components/conversas/ListaConversas";
 import { ThreadMensagens } from "@/components/conversas/ThreadMensagens";
 import { LeadPanel } from "@/components/conversas/LeadPanel";
@@ -36,8 +37,9 @@ export function Conversas() {
   // Mantém o realtime ativo enquanto a página estiver montada
   useConversasRealtime();
 
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
   const { data: operadores } = useOperadores();
+  const { naoLida, marcarLida } = useLeituraConversas(user?.id ?? null);
   const [filtroResp, setFiltroResp] = useState<string>(TODOS);
   const [filtroStatus, setFiltroStatus] = useState<string>(TODOS);
   const [periodo, setPeriodo] = useState<Periodo>({ tipo: "todas" });
@@ -50,6 +52,16 @@ export function Conversas() {
   const conversas = data ?? [];
   // O thread selecionado persiste mesmo que os filtros o escondam da lista.
   const ativa = conversas.find((c) => c.telefone_normalizado === selecionada);
+
+  // Marca a conversa aberta como lida (ao abrir e quando chega mensagem nova
+  // estando com ela em foco).
+  const ativaTel = ativa?.telefone_normalizado ?? null;
+  const ativaUltimaId = ativa?.ultima_mensagem?.id ?? null;
+  useEffect(() => {
+    if (ativaTel && ativaUltimaId != null && !document.hidden) {
+      marcarLida(ativaTel, ativaUltimaId);
+    }
+  }, [ativaTel, ativaUltimaId, marcarLida]);
 
   // Aplica o filtro de status primeiro; a contagem por período é feita
   // sobre essa base (para os números baterem com o que a data vai mostrar).
@@ -155,6 +167,7 @@ export function Conversas() {
             isLoading={isLoading}
             mostrarResponsavel={isAdmin}
             operadores={operadores ?? []}
+            naoLida={naoLida}
           />
         </div>
         <div className="min-h-0 overflow-hidden">
