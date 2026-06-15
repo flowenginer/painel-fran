@@ -5,7 +5,6 @@ import {
   Ban,
   Inbox,
   Loader2,
-  Lock,
   MessageSquare,
   Phone,
   ShieldCheck,
@@ -39,6 +38,7 @@ import { nomeOperador } from "@/lib/conversas-transfer";
 import { formatTelefone } from "@/lib/formatters";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { MensagemBubble } from "./MensagemBubble";
+import { Composer } from "./Composer";
 import { TransferirConversaDialog } from "./TransferirConversaDialog";
 import type { ConversaItem } from "@/hooks/useConversas";
 
@@ -205,14 +205,6 @@ export function ThreadMensagens({ conversa }: Props) {
               {iaBloqueada ? "Desbloquear IA" : "Bloquear IA"}
             </Button>
           )}
-          <Badge
-            variant="outline"
-            className="hidden gap-1 text-[10px] sm:inline-flex"
-            title="Esta visualização é somente leitura — não há envio de mensagens daqui"
-          >
-            <Lock className="h-3 w-3" />
-            Somente leitura
-          </Badge>
         </div>
       </div>
 
@@ -254,15 +246,24 @@ export function ThreadMensagens({ conversa }: Props) {
         {!isLoading &&
           !isError &&
           visiveis.map((m) => (
-            <MensagemBubble key={m.id} mensagem={m} />
+            <MensagemBubble
+              key={m.id}
+              mensagem={m}
+              autorNome={nomeOperador(operadores, m.enviado_por)}
+            />
           ))}
       </div>
 
-      {/* Rodapé indicando read-only */}
-      <div className="flex shrink-0 items-center justify-center gap-2 border-t bg-muted/20 px-4 py-2 text-xs text-muted-foreground">
-        <Lock className="h-3 w-3" />
-        <span>Histórico em tempo real · sem envio de mensagens</span>
-      </div>
+      {/* Aviso quando a IA ainda está ativa */}
+      {!iaBloqueada && conversa.devedor && (
+        <div className="shrink-0 border-t bg-yellow-500/10 px-4 py-1.5 text-center text-[11px] text-yellow-700 dark:text-yellow-400">
+          A IA ainda está ativa nesta conversa. Bloqueie a IA para assumir o
+          atendimento manualmente sem respostas automáticas.
+        </div>
+      )}
+
+      {/* Composer (envio de mensagem via n8n → UAZAPI) */}
+      <Composer telefoneNormalizado={telefone} disabled={!telefone} />
 
       {/* Modal de confirmação Bloquear/Desbloquear IA */}
       <Dialog open={confirmandoToggle} onOpenChange={setConfirmandoToggle}>

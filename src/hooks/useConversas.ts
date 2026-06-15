@@ -40,14 +40,14 @@ async function fetchConversas(): Promise<ConversaItem[]> {
       supabase
         .from("fran_devedores")
         .select(
-          "id, cpf, nome_devedor, primeiro_nome, telefone, telefone_2, telefone_3, instituicao, status_negociacao, status, responsavel_id, data_ultimo_contato, tentativas_contato, created_at, updated_at"
+          "id, cpf, nome_devedor, primeiro_nome, email, telefone, telefone_2, telefone_3, instituicao, valor_atualizado, status_negociacao, status, responsavel_id, data_ultimo_contato, tentativas_contato, created_at, updated_at"
         )
         .order("updated_at", { ascending: false, nullsFirst: false })
     ),
     fetchAllPages<FranMemoryRow>(() =>
       supabase
         .from("fran_memory")
-        .select("id, session_id, message")
+        .select("id, session_id, message, created_at, enviado_por")
         .order("id", { ascending: false })
     ),
   ]);
