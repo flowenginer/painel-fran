@@ -126,8 +126,18 @@ Deno.serve(async (req: Request) => {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const telefone = soDigitos(String(body.telefone ?? ""));
     const texto = String(body.texto ?? "").trim();
+    const tipo = String(body.tipo ?? "texto");
+    const mediaUrl =
+      typeof body.media_url === "string" && body.media_url.trim()
+        ? body.media_url.trim()
+        : null;
+    const ehMidia = tipo !== "texto";
     if (!telefone) return jsonResponse({ error: "telefone é obrigatório" }, 400);
-    if (!texto) return jsonResponse({ error: "Mensagem vazia" }, 400);
+    if (ehMidia) {
+      if (!mediaUrl) return jsonResponse({ error: "media_url é obrigatório" }, 400);
+    } else if (!texto) {
+      return jsonResponse({ error: "Mensagem vazia" }, 400);
+    }
 
     // 3. Permissão: admin OU dona da conversa.
     const perfilResp = await rest(
@@ -176,9 +186,10 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Assinatura do operador: prefixa "*Nome:*" (negrito no WhatsApp).
+    // Assinatura do operador: prefixa "*Nome:*" (negrito no WhatsApp). Em
+    // mídia, só assina se houver legenda.
     const nome = (p.nome ?? "").trim();
-    const textoFinal = nome ? `*${nome}:*\n${texto}` : texto;
+    const textoFinal = nome && texto ? `*${nome}:*\n${texto}` : texto;
 
     // 5. Envia via n8n.
     const ctrl = new AbortController();
@@ -194,9 +205,9 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify({
           acao: "enviar",
           telefone,
-          tipo: "texto",
+          tipo,
           texto: textoFinal,
-          media_url: null,
+          media_url: mediaUrl,
         }),
         signal: ctrl.signal,
       });
@@ -246,13 +257,24 @@ Deno.serve(async (req: Request) => {
     }
 
     // 6. Grava na fran_memory (formato LangChain) para aparecer na thread.
+    const placeholders: Record<string, string> = {
+      imagem: "[imagem]",
+      audio: "[áudio]",
+      documento: "[documento]",
+    };
+    const additional_kwargs = ehMidia
+      ? { media_tipo: tipo, media_url: mediaUrl }
+      : {};
+    const content = ehMidia
+      ? textoFinal || placeholders[tipo] || "[mídia]"
+      : textoFinal;
     const insResp = await rest(
       env,
       "POST",
       "/fran_memory",
       {
         session_id: telefone,
-        message: { type: "ai", content: textoFinal, additional_kwargs: {} },
+        message: { type: "ai", content, additional_kwargs },
         enviado_por: callerId,
       },
       { Prefer: "return=minimal" }

@@ -374,6 +374,30 @@ marcar como enviada uma mensagem que não chegou. Dica no n8n: deixe o nó
 HTTP da UAZAPI com "Continue On Fail" e use um `IF`/`Set` para montar a
 resposta de erro a partir do status retornado.
 
+### Envio de mídia (operadora → lead)
+
+Quando a operadora manda áudio/imagem/arquivo, o corpo chega com `tipo` ≠
+`texto` e a `media_url` apontando para o Storage público (`crm-midia`):
+
+```json
+{
+  "acao": "enviar",
+  "telefone": "5511933352405",
+  "tipo": "imagem",            // imagem | audio | documento
+  "texto": "legenda opcional",
+  "media_url": "https://<ref>.supabase.co/storage/v1/object/public/crm-midia/enviadas/...jpg"
+}
+```
+
+No `Switch (acao) → enviar`, ramifique por `tipo` e chame o endpoint de
+envio de mídia da UAZAPI passando a **URL** (ela aceita URL pública), ex.:
+`POST /send/media` com `{ number, type, file: <media_url>, text: <legenda> }`
+(ajuste ao formato/endpoint da sua UAZAPI). Mantenha a mesma regra de
+**propagar o erro real** (`ok:false`/HTTP ≥ 400 em caso de falha).
+
+Pré-requisito: rodar `migrations/0011_storage_crm_midia.sql` (cria o bucket
+`crm-midia` e as políticas de upload).
+
 ## Schema do banco (referência)
 
 O schema está ativo no Supabase via UI. Para recriar em outro ambiente,
