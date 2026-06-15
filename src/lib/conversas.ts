@@ -122,14 +122,25 @@ export function parsearMensagem(row: FranMemoryRow): MensagemParsed {
 }
 
 /**
+ * Gatilhos internos de automação (ex.: "Execute o follow up") são injetados
+ * como mensagens para acionar a IA — não são fala do lead nem do operador,
+ * então não devem aparecer no painel.
+ */
+export function ehMensagemAutomacao(content: string): boolean {
+  return /^\s*execute\s+(o\s+)?(follow[\s-]?up|workflow)\b/i.test(content ?? "");
+}
+
+/**
  * Mensagem deve aparecer na thread visível do operador?
- * Esconde tool calls, respostas de tool e mensagens de sistema.
+ * Esconde tool calls, respostas de tool, mensagens de sistema e gatilhos
+ * internos de automação.
  */
 export function ehMensagemVisivel(m: MensagemParsed): boolean {
   if (m.type === "tool") return false;
   if (m.type === "system") return false;
   if (m.type === "ai" && m.tem_tool_call) return false;
   if (m.type !== "ai" && m.type !== "human") return false;
+  if (ehMensagemAutomacao(m.content)) return false;
   return Boolean(m.content);
 }
 
