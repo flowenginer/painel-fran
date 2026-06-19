@@ -26,7 +26,10 @@ export interface WhatsappStatus {
 
 export type AcaoWhatsapp = "status" | "connect" | "disconnect";
 
-async function invocarProxy(acao: AcaoWhatsapp): Promise<WhatsappStatus> {
+async function invocarProxy(
+  acao: AcaoWhatsapp,
+  instancia?: string | null
+): Promise<WhatsappStatus> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -37,7 +40,7 @@ async function invocarProxy(acao: AcaoWhatsapp): Promise<WhatsappStatus> {
   const { data, error } = await supabase.functions.invoke<WhatsappStatus>(
     "uazapi-proxy",
     {
-      body: { acao },
+      body: { acao, instancia: instancia ?? null },
       headers: { Authorization: `Bearer ${session.access_token}` },
     }
   );
@@ -65,7 +68,8 @@ async function invocarProxy(acao: AcaoWhatsapp): Promise<WhatsappStatus> {
 }
 
 export const uazapi = {
-  status: () => invocarProxy("status"),
-  connect: () => invocarProxy("connect"),
-  disconnect: () => invocarProxy("disconnect"),
+  status: (instancia?: string | null) => invocarProxy("status", instancia),
+  connect: (instancia?: string | null) => invocarProxy("connect", instancia),
+  disconnect: (instancia?: string | null) =>
+    invocarProxy("disconnect", instancia),
 };

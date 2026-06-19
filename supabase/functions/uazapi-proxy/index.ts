@@ -7,39 +7,84 @@
 // Fluxo:
 //   Painel → uazapi-proxy → webhook do n8n → UAZAPI
 //
-// Por que essa indireção: a UAZAPI restringe acesso por IP. O Supabase Edge
-// não tem IP fixo, mas a VPS do cliente sim — e o n8n dela já está na
-// allowlist (a Fran usa hoje pra mandar mensagens via UAZAPI).
+// Multi-canal: o painel envia `instancia` (nome da instância UAZAPI, ex.:
+// "qi06bK"). O n8n resolve o token dessa instância e roteia status/connect/
+// disconnect para o número certo. Sem `instancia`, o n8n usa o canal padrão.
 //
 // Configuração necessária em fran_config:
 //   - uazapi_webhook_url     URL completa do webhook no n8n
 //   - uazapi_webhook_secret  segredo enviado via header X-Painel-Secret
+//
+// Autossuficiente (sem imports de ../_shared) para deploy pelo editor do
+// Supabase Dashboard, sem CLI.
 
-import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
-import { lerConfig, lerEnv, validarJwt } from "../_shared/supabase-rest.ts";
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...corsHeaders },
+  });
+}
+
+interface SupabaseEnv {
+  url: string;
+  anonKey: string;
+  serviceKey: string;
+}
+
+function lerEnv(): SupabaseEnv {
+  const url = Deno.env.get("SUPABASE_URL");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !anonKey || !serviceKey) {
+    throw new Error("Variáveis de ambiente do Supabase ausentes");
+  }
+  return { url, anonKey, serviceKey };
+}
+
+async function validarJwt(env: SupabaseEnv, authHeader: string): Promise<void> {
+  const resp = await fetch(`${env.url}/auth/v1/user`, {
+    headers: { Authorization: authHeader, apikey: env.anonKey },
+  });
+  if (!resp.ok) throw new Error(`Sessão inválida (HTTP ${resp.status})`);
+  const user = (await resp.json()) as { id?: string };
+  if (!user?.id) throw new Error("Usuário sem id");
+}
+
+async function lerConfig(
+  env: SupabaseEnv,
+  chaves: string[]
+): Promise<Record<string, string>> {
+  const filtro = `chave=in.(${chaves.join(",")})`;
+  const resp = await fetch(
+    `${env.url}/rest/v1/fran_config?${filtro}&select=chave,valor`,
+    {
+      headers: {
+        apikey: env.serviceKey,
+        Authorization: `Bearer ${env.serviceKey}`,
+      },
+    }
+  );
+  if (!resp.ok) throw new Error(`Falha ao ler fran_config: ${resp.status}`);
+  const rows = (await resp.json()) as Array<{
+    chave: string;
+    valor: string | null;
+  }>;
+  const mapa: Record<string, string> = {};
+  for (const r of rows) mapa[r.chave] = r.valor ?? "";
+  return mapa;
+}
 
 const TIMEOUT_MS = 30_000;
 
 type Acao = "status" | "connect" | "disconnect";
 const ACOES_VALIDAS: Acao[] = ["status", "connect", "disconnect"];
-
-interface RequestBody {
-  acao: Acao;
-}
-
-function validarBody(raw: unknown): RequestBody {
-  if (!raw || typeof raw !== "object") {
-    throw new Error("Body deve ser um objeto JSON");
-  }
-  const b = raw as Record<string, unknown>;
-  const acao = String(b.acao ?? "").trim() as Acao;
-  if (!ACOES_VALIDAS.includes(acao)) {
-    throw new Error(
-      `Ação inválida. Use uma das: ${ACOES_VALIDAS.join(", ")}`
-    );
-  }
-  return { acao };
-}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -50,7 +95,6 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    console.log("[uazapi-proxy] start");
     const env = lerEnv();
 
     // 1. Valida JWT do operador
@@ -61,7 +105,6 @@ Deno.serve(async (req: Request) => {
     try {
       await validarJwt(env, authHeader);
     } catch (err) {
-      console.error("[uazapi-proxy] JWT inválido:", err);
       return jsonResponse(
         {
           error: "Sessão inválida ou expirada. Faça login novamente.",
@@ -72,8 +115,18 @@ Deno.serve(async (req: Request) => {
     }
 
     // 2. Valida body
-    const body = await req.json().catch(() => null);
-    const { acao } = validarBody(body);
+    const raw = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const acao = String(raw.acao ?? "").trim() as Acao;
+    if (!ACOES_VALIDAS.includes(acao)) {
+      return jsonResponse(
+        { error: `Ação inválida. Use uma das: ${ACOES_VALIDAS.join(", ")}` },
+        400
+      );
+    }
+    const instancia =
+      typeof raw.instancia === "string" && raw.instancia.trim()
+        ? raw.instancia.trim()
+        : null;
 
     // 3. Lê configs
     const cfg = await lerConfig(env, [
@@ -101,8 +154,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 4. Chama o n8n
-    console.log("[uazapi-proxy] chamando n8n", { acao, webhookUrl });
+    // 4. Chama o n8n (repassa a instância para roteamento por número)
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
 
@@ -114,17 +166,14 @@ Deno.serve(async (req: Request) => {
           "Content-Type": "application/json",
           "X-Painel-Secret": secret,
         },
-        body: JSON.stringify({ acao }),
+        body: JSON.stringify({ acao, instancia }),
         signal: ctrl.signal,
       });
     } catch (err) {
       clearTimeout(timer);
       const msg = err instanceof Error ? err.message : String(err);
       if (err instanceof Error && err.name === "AbortError") {
-        return jsonResponse(
-          { error: "Timeout ao chamar webhook n8n" },
-          504
-        );
+        return jsonResponse({ error: "Timeout ao chamar webhook n8n" }, 504);
       }
       return jsonResponse(
         { error: `Falha de rede ao chamar webhook: ${msg}` },
@@ -142,11 +191,6 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!resp.ok) {
-      console.error(
-        "[uazapi-proxy] n8n respondeu erro",
-        resp.status,
-        texto.slice(0, 500)
-      );
       return jsonResponse(
         {
           error: `Webhook n8n retornou HTTP ${resp.status}`,
@@ -156,8 +200,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // O n8n retorna um array com 1 item — desencapsula pra ficar mais limpo
-    // no consumidor.
+    // O n8n retorna um array com 1 item — desencapsula.
     let data: unknown = json;
     if (Array.isArray(json) && json.length > 0) {
       data = json[0];
@@ -167,11 +210,6 @@ Deno.serve(async (req: Request) => {
   } catch (err) {
     console.error("[uazapi-proxy] exceção não tratada:", err);
     const message = err instanceof Error ? err.message : String(err);
-    const isValidation =
-      /Ação inválida|Body deve ser/.test(message);
-    return jsonResponse(
-      { error: message, stack: err instanceof Error ? err.stack : undefined },
-      isValidation ? 400 : 500
-    );
+    return jsonResponse({ error: message }, 500);
   }
 });
