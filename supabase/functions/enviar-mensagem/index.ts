@@ -172,6 +172,36 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // 3b. Canal/instância: responder pelo MESMO número que o lead falou.
+    // Fonte da verdade: última mensagem com canal (fran_canal_conversa).
+    // Sem isso (conversa nova/rollout), usa o canal padrão (ativo, menor
+    // ordem). A instância vai no payload para o n8n rotear, e é gravada em
+    // fran_memory.canal para manter o grude da conversa.
+    let instancia: string | null = null;
+    try {
+      const rpc = await rest(env, "POST", "/rpc/fran_canal_conversa", {
+        p_tel: telefone,
+      });
+      if (rpc.ok) {
+        const v = (await rpc.json().catch(() => null)) as unknown;
+        if (typeof v === "string" && v.trim()) instancia = v.trim();
+      }
+    } catch {
+      /* segue para o canal padrão */
+    }
+    if (!instancia) {
+      const defResp = await rest(
+        env,
+        "GET",
+        "/fran_canais?ativo=eq.true&order=ordem.asc,id.asc&limit=1&select=instancia"
+      );
+      const def = (await defResp.json().catch(() => [])) as Array<{
+        instancia: string | null;
+      }>;
+      const inst = def[0]?.instancia?.trim();
+      if (inst) instancia = inst;
+    }
+
     // 4. Configuração do webhook n8n (mesmo do uazapi-proxy).
     const cfg = await lerConfig(env, [
       "uazapi_webhook_url",
@@ -208,6 +238,7 @@ Deno.serve(async (req: Request) => {
           tipo,
           texto: textoFinal,
           media_url: mediaUrl,
+          instancia,
         }),
         signal: ctrl.signal,
       });
@@ -276,6 +307,7 @@ Deno.serve(async (req: Request) => {
         session_id: telefone,
         message: { type: "ai", content, additional_kwargs },
         enviado_por: callerId,
+        canal: instancia,
       },
       { Prefer: "return=minimal" }
     );
