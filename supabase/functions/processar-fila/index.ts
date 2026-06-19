@@ -305,6 +305,31 @@ interface WebhookResultado {
   erro: string | null;
 }
 
+interface CanalDisparo {
+  instancia: string;
+  token: string;
+}
+
+// Escolhe o próximo canal de disparo (rodízio ponderado por peso). Retorna
+// null se nenhum canal de disparo estiver configurado — o n8n usa o padrão.
+async function escolherCanal(
+  env: SupabaseEnv
+): Promise<CanalDisparo | null> {
+  try {
+    const resp = await rest(env, "POST", "/rpc/fran_proximo_canal_disparo", {});
+    if (!resp.ok) return null;
+    const rows = (await resp.json().catch(() => [])) as Array<{
+      instancia: string | null;
+      token: string | null;
+    }>;
+    const r = Array.isArray(rows) ? rows[0] : null;
+    if (!r || !r.instancia) return null;
+    return { instancia: r.instancia, token: r.token ?? "" };
+  } catch {
+    return null;
+  }
+}
+
 async function atribuirResponsaveis(
   env: SupabaseEnv,
   devedorIds: number[]
@@ -573,11 +598,25 @@ Deno.serve(async (req: Request) => {
       const itemIds = grupo.map((g) => g.itemId);
       const devedorIds = devedores.map((d) => d.id);
 
+      // Canal de disparo por devedor (rodízio ponderado por peso).
+      const canalPorDev = new Map<number, CanalDisparo>();
+      for (const d of devedores) {
+        const c = await escolherCanal(env);
+        if (c) canalPorDev.set(d.id, c);
+      }
+
       const webhook = await enviarWebhook(webhookUrl, {
         campanha,
         origem: "fila",
         reenviar: false,
-        devedores: devedores.map(montarPayloadDevedor),
+        devedores: devedores.map((d) => {
+          const c = canalPorDev.get(d.id);
+          return {
+            ...montarPayloadDevedor(d),
+            instancia: c?.instancia ?? null,
+            token: c?.token ?? null,
+          };
+        }),
       });
 
       // Registra em fran_disparos (1 linha por devedor).

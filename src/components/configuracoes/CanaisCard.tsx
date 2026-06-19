@@ -14,8 +14,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   useAtualizarCanal,
   useCanais,
+  useCanalTokens,
   useCriarCanal,
   useRemoverCanal,
+  useSalvarCanalToken,
 } from "@/hooks/useCanais";
 
 interface Edit {
@@ -27,12 +29,15 @@ interface Edit {
 
 export function CanaisCard() {
   const { data: canais, isLoading } = useCanais();
+  const { data: tokensServidor } = useCanalTokens();
   const { mutate: criar, isPending: criando } = useCriarCanal();
   const { mutate: atualizar } = useAtualizarCanal();
   const { mutate: remover } = useRemoverCanal();
+  const { mutate: salvarToken } = useSalvarCanalToken();
 
   // Campos de texto editáveis localmente; ressincroniza com o servidor.
   const [edits, setEdits] = useState<Record<number, Edit>>({});
+  const [tokens, setTokens] = useState<Record<number, string>>({});
   useEffect(() => {
     if (canais) {
       setEdits(
@@ -50,6 +55,9 @@ export function CanaisCard() {
       );
     }
   }, [canais]);
+  useEffect(() => {
+    if (tokensServidor) setTokens(tokensServidor);
+  }, [tokensServidor]);
 
   function campo(id: number, key: keyof Edit, value: string) {
     setEdits((p) => ({ ...p, [id]: { ...p[id], [key]: value } }));
@@ -67,6 +75,10 @@ export function CanaisCard() {
         peso: Math.max(Math.floor(Number(e.peso) || 1), 1),
       },
     });
+  }
+
+  function salvarTokenCampo(id: number) {
+    salvarToken({ canalId: id, token: (tokens[id] ?? "").trim() });
   }
 
   function adicionar() {
@@ -92,8 +104,10 @@ export function CanaisCard() {
               <tr className="border-b text-left text-xs text-muted-foreground">
                 <th className="py-2 pr-2">Nome</th>
                 <th className="px-2 py-2">Instância (n8n)</th>
+                <th className="px-2 py-2">Token (disparo)</th>
                 <th className="px-2 py-2">Número</th>
                 <th className="px-2 py-2 text-center">Peso</th>
+                <th className="px-2 py-2 text-center">Disparo</th>
                 <th className="px-2 py-2 text-center">Ativo</th>
                 <th className="px-2 py-2" />
               </tr>
@@ -102,7 +116,7 @@ export function CanaisCard() {
               {isLoading && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={8}
                     className="py-6 text-center text-muted-foreground"
                   >
                     <Loader2 className="mx-auto h-4 w-4 animate-spin" />
@@ -136,6 +150,21 @@ export function CanaisCard() {
                       </td>
                       <td className="px-2 py-2">
                         <Input
+                          type="password"
+                          className="h-8 w-44 font-mono"
+                          placeholder="token da instância"
+                          value={tokens[c.id] ?? ""}
+                          onChange={(ev) =>
+                            setTokens((p) => ({
+                              ...p,
+                              [c.id]: ev.target.value,
+                            }))
+                          }
+                          onBlur={() => salvarTokenCampo(c.id)}
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <Input
                           className="h-8 w-36"
                           placeholder="55 11 9..."
                           value={e?.numero ?? ""}
@@ -153,6 +182,17 @@ export function CanaisCard() {
                           value={e?.peso ?? "1"}
                           onChange={(ev) => campo(c.id, "peso", ev.target.value)}
                           onBlur={() => salvarCampo(c.id)}
+                        />
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        <Checkbox
+                          checked={c.usar_no_disparo}
+                          onCheckedChange={(v) =>
+                            atualizar({
+                              id: c.id,
+                              patch: { usar_no_disparo: v === true },
+                            })
+                          }
                         />
                       </td>
                       <td className="px-2 py-2 text-center">
@@ -184,7 +224,7 @@ export function CanaisCard() {
               {!isLoading && (canais?.length ?? 0) === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={8}
                     className="py-6 text-center text-muted-foreground"
                   >
                     Nenhum canal cadastrado.
@@ -196,9 +236,11 @@ export function CanaisCard() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">
-            O peso define a fatia de disparos de cada número (usado na
-            distribuição). Alterações salvam automaticamente.
+          <p className="max-w-2xl text-xs text-muted-foreground">
+            <strong>Disparo</strong>: marca quais números entram no rodízio da
+            1ª mensagem. <strong>Peso</strong>: fatia de cada número (maior =
+            mais disparos). <strong>Token</strong>: usado só no disparo e visível
+            apenas para admin. Alterações salvam automaticamente.
           </p>
           <Button
             variant="outline"

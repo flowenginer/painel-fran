@@ -76,7 +76,29 @@ Assim cada ação (incluindo o envio) usa o número certo. Alternativa dinâmica
 em vez do mapa estático, chamar `/instance/all` (admintoken) e achar o token
 pelo `name == body.instancia`.
 
-## Fase 2 (pendente)
+## Fase 2 — Distribuição de disparos (anti-bloqueio)
 
-Distribuição anti-bloqueio no **primeiro contato** (disparo): o painel escolhe
-o canal por peso e manda a `instancia` no payload do disparo.
+No **primeiro contato** (disparo), o painel escolhe o canal por **rodízio
+ponderado pelo peso** (entre os canais `ativo` + `usar_no_disparo` + com token)
+e injeta, **em cada devedor do payload**, dois campos:
+
+- `instancia` — o nome da instância (ex.: `xzsjyc`)
+- `token` — o token daquela instância (vem da tabela só-admin `fran_canal_token`)
+
+### Configuração
+- **Configurações → Canais:** marque **Disparo** nos números que entram no
+  rodízio, ajuste o **Peso** e preencha o **Token** de cada um (campo só-admin).
+- Rode `supabase/migrations/0014_canais_disparo.sql`.
+- Deploy das Edge Functions `disparar-lote` e `processar-fila`.
+
+### n8n — fluxo de disparo (o que recebe `devedores[]`)
+Cada item do loop agora tem `instancia` e `token`. Ajuste:
+
+1. **Nós de envio** (`Send Message - faculdades`, `Send Message - alunos`):
+   header `token` → `{{ $json.token }}` (em vez do token fixo).
+2. **Inserts na `fran_memory`** (Postgres): adicione a coluna **`canal`** com o
+   valor `{{ $json.instancia }}` — é o que faz a conversa "grudar" no número e
+   a resposta sair pelo mesmo.
+
+> Se `token`/`instancia` vierem nulos (nenhum canal de disparo configurado), o
+> fluxo segue com o token fixo de antes — rollout seguro.

@@ -11,6 +11,8 @@ export interface Canal {
   ativo: boolean;
   peso: number;
   ordem: number;
+  /** Participa do rodízio de disparo (1ª mensagem). */
+  usar_no_disparo: boolean;
 }
 
 export interface CanalInput {
@@ -20,16 +22,46 @@ export interface CanalInput {
   ativo?: boolean;
   peso?: number;
   ordem?: number;
+  usar_no_disparo?: boolean;
 }
 
 export async function listarCanais(): Promise<Canal[]> {
   const { data, error } = await supabase
     .from("fran_canais")
-    .select("id, nome, instancia, numero, ativo, peso, ordem")
+    .select("id, nome, instancia, numero, ativo, peso, ordem, usar_no_disparo")
     .order("ordem", { ascending: true })
     .order("id", { ascending: true });
   if (error) throw new Error(error.message);
   return (data ?? []) as Canal[];
+}
+
+/** Tokens por canal (tabela só-admin). Mapa canal_id → token. */
+export async function listarCanalTokens(): Promise<Record<number, string>> {
+  const { data, error } = await supabase
+    .from("fran_canal_token")
+    .select("canal_id, token");
+  if (error) throw new Error(error.message);
+  const mapa: Record<number, string> = {};
+  for (const r of (data ?? []) as Array<{
+    canal_id: number;
+    token: string | null;
+  }>) {
+    mapa[r.canal_id] = r.token ?? "";
+  }
+  return mapa;
+}
+
+export async function salvarCanalToken(
+  canalId: number,
+  token: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("fran_canal_token")
+    .upsert(
+      { canal_id: canalId, token, updated_at: new Date().toISOString() },
+      { onConflict: "canal_id" }
+    );
+  if (error) throw new Error(error.message);
 }
 
 export async function criarCanal(input: CanalInput): Promise<void> {

@@ -5,7 +5,9 @@ import {
   atualizarCanal,
   criarCanal,
   listarCanais,
+  listarCanalTokens,
   removerCanal,
+  salvarCanalToken,
   type Canal,
   type CanalInput,
 } from "@/lib/canais";
@@ -17,6 +19,31 @@ export function useCanais(enabled = true) {
     queryFn: listarCanais,
     enabled,
     staleTime: 30_000,
+  });
+}
+
+export function useCanalTokens(enabled = true) {
+  return useQuery<Record<number, string>>({
+    queryKey: ["canal-tokens"],
+    queryFn: listarCanalTokens,
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+export function useSalvarCanalToken() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: ({ canalId, token }: { canalId: number; token: string }) =>
+      salvarCanalToken(canalId, token),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["canal-tokens"] }),
+    onError: (e) =>
+      toast({
+        variant: "destructive",
+        title: "Erro ao salvar token",
+        description: e instanceof Error ? e.message : "Operação falhou",
+      }),
   });
 }
 
