@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Phone,
   ShieldCheck,
+  Smartphone,
   UserRound,
 } from "lucide-react";
 
@@ -34,6 +35,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useOperadores } from "@/hooks/useOperadores";
+import { useCanais } from "@/hooks/useCanais";
 import { nomeOperador } from "@/lib/conversas-transfer";
 import { formatTelefone } from "@/lib/formatters";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
@@ -77,6 +79,13 @@ export function ThreadMensagens({ conversa }: Props) {
   const { toast } = useToast();
   const { isAdmin, temPermissao } = useAuth();
   const { data: operadores } = useOperadores();
+  const { data: canais } = useCanais();
+
+  // Canal de saída da conversa = instância da última mensagem com canal.
+  const canalInstancia = conversa?.ultima_mensagem?.canal ?? null;
+  const canalNome = canalInstancia
+    ? canais?.find((c) => c.instancia === canalInstancia)?.nome ?? canalInstancia
+    : null;
 
   const iaBloqueada = conversa?.devedor?.status === STATUS_BLOCK_IA;
   const responsavelId = conversa?.devedor?.responsavel_id ?? null;
@@ -163,6 +172,16 @@ export function ThreadMensagens({ conversa }: Props) {
             >
               <UserRound className="h-3 w-3" />
               {responsavelNome ?? "Sem responsável"}
+            </Badge>
+          )}
+          {canalNome && (
+            <Badge
+              variant="outline"
+              className="gap-1 text-[10px]"
+              title="Número de saída desta conversa (responde pelo mesmo canal)"
+            >
+              <Smartphone className="h-3 w-3" />
+              {canalNome}
             </Badge>
           )}
           {podeTransferir && conversa.devedor && (

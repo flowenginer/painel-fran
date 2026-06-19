@@ -21,6 +21,8 @@ export interface FranMemoryRow {
   created_at?: string | null;
   /** Operadora que enviou pelo painel (null = IA/sistema/lead). */
   enviado_por?: string | null;
+  /** Instância/canal por onde a mensagem passou (null em linhas antigas). */
+  canal?: string | null;
 }
 
 export type TipoMensagem =
@@ -58,6 +60,8 @@ export interface MensagemParsed {
   created_at: string | null;
   /** Operadora que enviou pelo painel (null = IA/lead). */
   enviado_por: string | null;
+  /** Instância/canal por onde a mensagem passou. null = desconhecido. */
+  canal: string | null;
   /** Mídia (vinda de additional_kwargs.media_*). null = sem mídia. */
   media_url: string | null;
   media_tipo: string | null;
@@ -126,6 +130,7 @@ export function parsearMensagem(row: FranMemoryRow): MensagemParsed {
       : false,
     created_at: row.created_at ?? null,
     enviado_por: row.enviado_por ?? null,
+    canal: lerStr(row.canal),
     media_url: lerStr(ak.media_url),
     media_tipo: lerStr(ak.media_tipo),
     media_mime: lerStr(ak.media_mime),

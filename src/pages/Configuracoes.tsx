@@ -17,6 +17,7 @@ import { useSaveConfig } from "@/hooks/useSaveConfig";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { DistribuicaoCard } from "@/components/configuracoes/DistribuicaoCard";
+import { CanaisCard } from "@/components/configuracoes/CanaisCard";
 import { buscarNoCedrus } from "@/lib/cedrus";
 import { supabase } from "@/lib/supabase";
 
@@ -421,6 +422,8 @@ export function Configuracoes() {
           </div>
         </CardContent>
       </Card>
+
+      {isAdmin && <CanaisCard />}
 
       {isAdmin && <DistribuicaoCard />}
 
