@@ -1,28 +1,27 @@
-// Mutations para conectar/desconectar o WhatsApp pelo painel.
-// Atualiza imediatamente o cache de status (optimistic update) e em seguida
-// força um refetch pra refletir o estado novo vindo do UAZAPI.
+// Mutations para conectar/desconectar UM canal WhatsApp (instância) pelo painel.
+// Atualiza imediatamente o cache de status daquela instância e força refetch.
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { uazapi, type WhatsappStatus } from "@/lib/uazapi";
 
-export function useConectarWhatsapp() {
+export function useConectarWhatsapp(instancia: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => uazapi.connect(),
+    mutationFn: () => uazapi.connect(instancia),
     onSuccess: (data) => {
-      qc.setQueryData<WhatsappStatus>(["whatsapp", "status"], data);
-      qc.invalidateQueries({ queryKey: ["whatsapp", "status"] });
+      qc.setQueryData<WhatsappStatus>(["whatsapp", "status", instancia], data);
+      qc.invalidateQueries({ queryKey: ["whatsapp", "status", instancia] });
     },
   });
 }
 
-export function useDesconectarWhatsapp() {
+export function useDesconectarWhatsapp(instancia: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => uazapi.disconnect(),
+    mutationFn: () => uazapi.disconnect(instancia),
     onSuccess: (data) => {
-      qc.setQueryData<WhatsappStatus>(["whatsapp", "status"], data);
-      qc.invalidateQueries({ queryKey: ["whatsapp", "status"] });
+      qc.setQueryData<WhatsappStatus>(["whatsapp", "status", instancia], data);
+      qc.invalidateQueries({ queryKey: ["whatsapp", "status", instancia] });
     },
   });
 }
