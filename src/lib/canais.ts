@@ -91,6 +91,22 @@ export async function atualizarCanal(
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Atualiza o cache de conexão de um canal pelo nome da instância.
+ * Best-effort: silencia erro (ex.: RLS para não-admin).
+ */
+export async function marcarConexaoCanal(
+  instancia: string,
+  conectado: boolean
+): Promise<void> {
+  const inst = instancia.trim();
+  if (!inst) return;
+  await supabase
+    .from("fran_canais")
+    .update({ conectado, status_em: new Date().toISOString() })
+    .eq("instancia", inst);
+}
+
 export async function removerCanal(id: number): Promise<void> {
   const { error } = await supabase.from("fran_canais").delete().eq("id", id);
   if (error) throw new Error(error.message);

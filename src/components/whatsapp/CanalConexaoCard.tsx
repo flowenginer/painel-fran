@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -37,7 +37,7 @@ import {
   useDesconectarWhatsapp,
 } from "@/hooks/useWhatsappMutations";
 import { formatTelefone, formatTempoRelativo } from "@/lib/formatters";
-import type { Canal } from "@/lib/canais";
+import { marcarConexaoCanal, type Canal } from "@/lib/canais";
 
 function StatusBadge({ estado }: { estado: string | undefined }) {
   if (estado === "connected") {
@@ -116,6 +116,16 @@ export function CanalConexaoCard({ canal }: Props) {
   const estado = data?.estado;
   const conectado = estado === "connected";
   const conectandoNow = estado === "connecting";
+
+  // Grava o status de conexão na fran_canais (cache da bolinha em Canais).
+  // Só escreve quando o estado muda, e best-effort (RLS para não-admin).
+  const ultimoConectado = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!instancia || estado === undefined) return;
+    if (ultimoConectado.current === conectado) return;
+    ultimoConectado.current = conectado;
+    void marcarConexaoCanal(instancia, conectado);
+  }, [instancia, estado, conectado]);
 
   return (
     <Card>
