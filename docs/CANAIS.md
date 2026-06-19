@@ -102,3 +102,11 @@ Cada item do loop agora tem `instancia` e `token`. Ajuste:
 
 > Se `token`/`instancia` vierem nulos (nenhum canal de disparo configurado), o
 > fluxo segue com o token fixo de antes — rollout seguro.
+
+### Só canais conectados (0015)
+No momento do disparo, as Edge Functions checam ao vivo (ação `status` do n8n)
+quais instâncias de disparo estão **conectadas** e só rodam o rodízio entre
+elas — números offline são pulados automaticamente. O resultado é cacheado em
+`fran_canais.conectado` (bolinha verde na tela de Canais). Se a checagem não
+puder rodar (webhook de status não configurado), o rodízio não filtra por
+conexão (comportamento anterior).

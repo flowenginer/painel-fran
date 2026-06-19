@@ -310,13 +310,20 @@ interface CanalDisparo {
   token: string;
 }
 
-// Escolhe o próximo canal de disparo (rodízio ponderado por peso). Retorna
-// null se nenhum canal de disparo estiver configurado — o n8n usa o padrão.
+// Escolhe o próximo canal de disparo (rodízio ponderado por peso). Quando
+// `conectadas` é passado, só considera essas instâncias. Retorna null se
+// nenhum canal elegível — o n8n usa o número padrão dele.
 async function escolherCanal(
-  env: SupabaseEnv
+  env: SupabaseEnv,
+  conectadas: string[] | null
 ): Promise<CanalDisparo | null> {
   try {
-    const resp = await rest(env, "POST", "/rpc/fran_proximo_canal_disparo", {});
+    const resp = await rest(
+      env,
+      "POST",
+      "/rpc/fran_proximo_canal_disparo",
+      conectadas ? { p_conectadas: conectadas } : {}
+    );
     if (!resp.ok) return null;
     const rows = (await resp.json().catch(() => [])) as Array<{
       instancia: string | null;
@@ -325,6 +332,74 @@ async function escolherCanal(
     const r = Array.isArray(rows) ? rows[0] : null;
     if (!r || !r.instancia) return null;
     return { instancia: r.instancia, token: r.token ?? "" };
+  } catch {
+    return null;
+  }
+}
+
+// Checa, via webhook de status do n8n (UAZAPI), se a instância está conectada.
+async function instanciaConectada(
+  webhookUrl: string,
+  secret: string,
+  instancia: string
+): Promise<boolean> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8_000);
+  try {
+    const r = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Painel-Secret": secret },
+      body: JSON.stringify({ acao: "status", instancia }),
+      signal: ctrl.signal,
+    });
+    if (!r.ok) return false;
+    const raw = await r.json().catch(() => null);
+    const o = (Array.isArray(raw) ? raw[0] : raw) as Record<string, unknown> | null;
+    return String(o?.estado ?? "") === "connected";
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Lista as instâncias de disparo CONECTADAS agora e atualiza o cache
+// fran_canais.conectado. Retorna null quando a checagem não pôde rodar.
+async function lerCanaisConectados(
+  env: SupabaseEnv,
+  webhookUrl: string,
+  secret: string
+): Promise<string[] | null> {
+  if (!webhookUrl || !secret) return null;
+  try {
+    const resp = await rest(
+      env,
+      "GET",
+      "/fran_canais?ativo=eq.true&usar_no_disparo=eq.true&select=id,instancia"
+    );
+    if (!resp.ok) return null;
+    const canais = (await resp.json().catch(() => [])) as Array<{
+      id: number;
+      instancia: string | null;
+    }>;
+    const candidatos = canais.filter((c) => (c.instancia ?? "").trim());
+    if (candidatos.length === 0) return null;
+
+    const resultados = await Promise.all(
+      candidatos.map(async (c) => {
+        const inst = (c.instancia ?? "").trim();
+        const conectado = await instanciaConectada(webhookUrl, secret, inst);
+        await rest(
+          env,
+          "PATCH",
+          `/fran_canais?id=eq.${c.id}`,
+          { conectado, status_em: new Date().toISOString() },
+          { Prefer: "return=minimal" }
+        ).catch(() => undefined);
+        return { inst, conectado };
+      })
+    );
+    return resultados.filter((r) => r.conectado).map((r) => r.inst);
   } catch {
     return null;
   }
@@ -461,6 +536,8 @@ Deno.serve(async (req: Request) => {
       "horario_disparo_inicio",
       "horario_disparo_fim",
       "n8n_webhook_url",
+      "uazapi_webhook_url",
+      "uazapi_webhook_secret",
     ]);
 
     const auth = await autorizar(env, req, cfg.fila_cron_secret?.trim() ?? "");
@@ -472,6 +549,8 @@ Deno.serve(async (req: Request) => {
     const horaInicio = cfg.horario_disparo_inicio?.trim() || "08:00";
     const horaFim = cfg.horario_disparo_fim?.trim() || "20:00";
     const webhookUrl = cfg.n8n_webhook_url?.trim();
+    const statusUrl = cfg.uazapi_webhook_url?.trim() || "";
+    const statusSecret = cfg.uazapi_webhook_secret?.trim() || "";
 
     if (!filaAtiva) return ocioso("fila_pausada");
     if (porHora <= 0) return ocioso("taxa_por_hora_zerada");
@@ -592,6 +671,9 @@ Deno.serve(async (req: Request) => {
     let erros = 0;
     const agora = new Date().toISOString();
 
+    // Instâncias conectadas agora — só elas entram no rodízio de disparo.
+    const conectadas = await lerCanaisConectados(env, statusUrl, statusSecret);
+
     for (const [campanhaChave, grupo] of grupos) {
       const campanha = campanhaChave || undefined;
       const devedores = grupo.map((g) => g.devedor);
@@ -601,7 +683,7 @@ Deno.serve(async (req: Request) => {
       // Canal de disparo por devedor (rodízio ponderado por peso).
       const canalPorDev = new Map<number, CanalDisparo>();
       for (const d of devedores) {
-        const c = await escolherCanal(env);
+        const c = await escolherCanal(env, conectadas);
         if (c) canalPorDev.set(d.id, c);
       }
 

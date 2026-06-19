@@ -184,16 +184,29 @@ export function CanaisCard() {
                           onBlur={() => salvarCampo(c.id)}
                         />
                       </td>
-                      <td className="px-2 py-2 text-center">
-                        <Checkbox
-                          checked={c.usar_no_disparo}
-                          onCheckedChange={(v) =>
-                            atualizar({
-                              id: c.id,
-                              patch: { usar_no_disparo: v === true },
-                            })
-                          }
-                        />
+                      <td className="px-2 py-2">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Checkbox
+                            checked={c.usar_no_disparo}
+                            onCheckedChange={(v) =>
+                              atualizar({
+                                id: c.id,
+                                patch: { usar_no_disparo: v === true },
+                              })
+                            }
+                          />
+                          <span
+                            className={
+                              "h-2 w-2 rounded-full " +
+                              (c.conectado ? "bg-green-500" : "bg-muted-foreground/30")
+                            }
+                            title={
+                              c.conectado
+                                ? "Conectado (último disparo)"
+                                : "Sem conexão confirmada — não recebe disparos"
+                            }
+                          />
+                        </div>
                       </td>
                       <td className="px-2 py-2 text-center">
                         <Checkbox
@@ -238,9 +251,11 @@ export function CanaisCard() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="max-w-2xl text-xs text-muted-foreground">
             <strong>Disparo</strong>: marca quais números entram no rodízio da
-            1ª mensagem. <strong>Peso</strong>: fatia de cada número (maior =
-            mais disparos). <strong>Token</strong>: usado só no disparo e visível
-            apenas para admin. Alterações salvam automaticamente.
+            1ª mensagem — a bolinha verde indica conexão (só números conectados
+            recebem disparos; os offline são pulados automaticamente).{" "}
+            <strong>Peso</strong>: fatia de cada número (maior = mais disparos).{" "}
+            <strong>Token</strong>: usado só no disparo e visível apenas para
+            admin. Alterações salvam automaticamente.
           </p>
           <Button
             variant="outline"
