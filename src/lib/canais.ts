@@ -13,6 +13,8 @@ export interface Canal {
   ordem: number;
   /** Participa do rodízio de disparo (1ª mensagem). */
   usar_no_disparo: boolean;
+  /** Última conexão conhecida (cache, atualizado nos disparos). */
+  conectado: boolean;
 }
 
 export interface CanalInput {
@@ -28,7 +30,9 @@ export interface CanalInput {
 export async function listarCanais(): Promise<Canal[]> {
   const { data, error } = await supabase
     .from("fran_canais")
-    .select("id, nome, instancia, numero, ativo, peso, ordem, usar_no_disparo")
+    .select(
+      "id, nome, instancia, numero, ativo, peso, ordem, usar_no_disparo, conectado"
+    )
     .order("ordem", { ascending: true })
     .order("id", { ascending: true });
   if (error) throw new Error(error.message);
