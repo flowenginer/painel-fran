@@ -145,9 +145,10 @@ export function Fila() {
             Fila de Disparo
           </h1>
           <p className="text-sm text-muted-foreground">
-            Distribuição automática em gotejamento: até {porHora}/hora, máx{" "}
-            {limiteDiario}/dia, entre {horaInicio}–{horaFim}. Ao bater o
-            limite, retoma no dia seguinte.
+            Gotejamento uniforme: 1 lead por vez, ~1 a cada{" "}
+            {porHora > 0 ? Math.round(60 / porHora) : "—"} min (até {porHora}
+            /hora em janela móvel), máx {limiteDiario}/dia, entre {horaInicio}–
+            {horaFim}. Ao bater o limite, retoma quando liberar.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
