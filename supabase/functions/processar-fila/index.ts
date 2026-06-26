@@ -177,25 +177,6 @@ function inicioHojeSaoPauloUTC(): string {
   return new Date(`${hoje}T00:00:00-03:00`).toISOString();
 }
 
-function inicioHoraAtualSaoPauloUTC(): string {
-  const fmt = new Intl.DateTimeFormat("en-CA", {
-    timeZone: TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    hour12: false,
-  });
-  const parts = fmt.formatToParts(new Date());
-  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
-  const ano = get("year");
-  const mes = get("month");
-  const dia = get("day");
-  let hora = get("hour");
-  if (hora === "24") hora = "00";
-  return new Date(`${ano}-${mes}-${dia}T${hora}:00:00-03:00`).toISOString();
-}
-
 function diaSemanaSaoPaulo(): number {
   const fmt = new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "short" });
   const dia = fmt.format(new Date());
@@ -250,6 +231,24 @@ async function contarEnviadosDesde(
   }
   const contentRange = resp.headers.get("content-range") ?? "0-0/0";
   return Number(contentRange.split("/")[1]) || 0;
+}
+
+// Timestamp (ms) do disparo enviado mais recente; null se nunca disparou.
+// Usado para o gotejamento (intervalo mínimo entre envios).
+async function ultimoEnvioMs(env: SupabaseEnv): Promise<number | null> {
+  const resp = await rest(
+    env,
+    "GET",
+    "/fran_disparos?status_envio=eq.enviado&select=data_disparo&order=data_disparo.desc&limit=1"
+  );
+  if (!resp.ok) return null;
+  const rows = (await resp.json().catch(() => [])) as Array<{
+    data_disparo: string | null;
+  }>;
+  const v = rows[0]?.data_disparo;
+  if (!v) return null;
+  const t = new Date(v).getTime();
+  return Number.isNaN(t) ? null : t;
 }
 
 function montarPayloadDevedor(d: DevedorRow) {
@@ -463,9 +462,6 @@ async function enviarWebhook(
 }
 // ───────────────────────── fim dos helpers inlinados ─────────────────────
 
-// Quantas vezes o cron roda por hora (a cada 10 min). Usado para diluir a
-// taxa por hora em levas menores, evitando rajadas no topo de cada hora.
-const RUNS_POR_HORA = 6;
 // Tentativas de webhook antes de marcar o item da fila como erro.
 const MAX_TENTATIVAS = 3;
 
@@ -567,33 +563,48 @@ Deno.serve(async (req: Request) => {
       return ocioso("fora_horario", { horario: `${horaInicio}-${horaFim}` });
     }
 
-    // Quanto ainda cabe hoje e nesta hora.
+    // Quanto cabe hoje e na ÚLTIMA HORA (janela MÓVEL de 60 min — não reseta
+    // no :00 do relógio, evitando rajada na virada da hora).
     const enviadosHoje = await contarEnviadosDesde(
       env,
       inicioHojeSaoPauloUTC()
     );
-    const enviadosHora = await contarEnviadosDesde(
-      env,
-      inicioHoraAtualSaoPauloUTC()
-    );
+    const umaHoraAtras = new Date(Date.now() - 3_600_000).toISOString();
+    const enviadosHora = await contarEnviadosDesde(env, umaHoraAtras);
 
     const restanteDia = Math.max(0, limiteDiario - enviadosHoje);
     const restanteHora = Math.max(0, porHora - enviadosHora);
-    // Dilui a taxa por hora nas execuções do cron (evita rajada).
-    const capPorRun = Math.max(1, Math.ceil(porHora / RUNS_POR_HORA));
 
-    const quota = Math.min(restanteDia, restanteHora, capPorRun);
-    if (quota <= 0) {
-      return ocioso(
-        restanteDia <= 0 ? "limite_diario_atingido" : "limite_hora_atingido",
-        {
-          enviados_hoje: enviadosHoje,
-          limite_diario: limiteDiario,
-          enviados_hora: enviadosHora,
-          por_hora: porHora,
-        }
-      );
+    // Gotejamento fino: 1 lead por execução, espaçado por um intervalo mínimo
+    // (60min / porHora). Ex.: 20/h → 1 a cada 3 min, uniforme. O "Processar
+    // agora" (manual) ignora o intervalo para efeito imediato, mas respeita os
+    // limites por hora/dia.
+    const intervaloMs = Math.max(1, Math.floor(3_600_000 / porHora));
+    const ultimoMs = await ultimoEnvioMs(env);
+    const desdeUltimoMs = ultimoMs == null ? Infinity : Date.now() - ultimoMs;
+    const intervaloOk = auth.via === "usuario" || desdeUltimoMs >= intervaloMs;
+
+    if (restanteDia <= 0) {
+      return ocioso("limite_diario_atingido", {
+        enviados_hoje: enviadosHoje,
+        limite_diario: limiteDiario,
+      });
     }
+    if (restanteHora <= 0) {
+      return ocioso("limite_hora_atingido", {
+        enviados_hora: enviadosHora,
+        por_hora: porHora,
+      });
+    }
+    if (!intervaloOk) {
+      return ocioso("aguardando_intervalo", {
+        intervalo_s: Math.round(intervaloMs / 1000),
+        desde_ultimo_s: Math.round(desdeUltimoMs / 1000),
+      });
+    }
+
+    // Gotejamento: 1 por execução.
+    const quota = 1;
 
     // Busca itens na fila + devedor embutido. Pega um buffer extra para
     // compensar itens que se tornaram inelegíveis (já contatados, etc.).
