@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeftRight,
@@ -50,6 +50,37 @@ import type { ConversaItem } from "@/hooks/useConversas";
 
 interface Props {
   conversa: ConversaItem | null;
+}
+
+/** Dia (YYYY-MM-DD) no fuso de São Paulo, para comparar/agrupar por data. */
+function diaSP(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
+/** Rótulo amigável do dia: Hoje, Ontem ou "sáb, 28/06/2026". */
+function rotuloDia(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const dia = diaSP(iso);
+  const hoje = diaSP(new Date().toISOString());
+  const ontem = diaSP(new Date(Date.now() - 86_400_000).toISOString());
+  if (dia === hoje) return "Hoje";
+  if (dia === ontem) return "Ontem";
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(d);
 }
 
 function iniciais(nome: string | null | undefined): string {
@@ -266,14 +297,29 @@ export function ThreadMensagens({ conversa }: Props) {
 
         {!isLoading &&
           !isError &&
-          visiveis.map((m) => (
-            <MensagemBubble
-              key={m.id}
-              mensagem={m}
-              autorNome={nomeOperador(operadores, m.enviado_por)}
-              onAbrirMidia={setMidiaAberta}
-            />
-          ))}
+          visiveis.map((m, i) => {
+            const anterior = visiveis[i - 1];
+            const label =
+              m.created_at && diaSP(anterior?.created_at) !== diaSP(m.created_at)
+                ? rotuloDia(m.created_at)
+                : "";
+            return (
+              <Fragment key={m.id}>
+                {label && (
+                  <div className="flex justify-center py-2">
+                    <span className="rounded-full bg-muted px-3 py-0.5 text-[11px] font-medium text-muted-foreground">
+                      {label}
+                    </span>
+                  </div>
+                )}
+                <MensagemBubble
+                  mensagem={m}
+                  autorNome={nomeOperador(operadores, m.enviado_por)}
+                  onAbrirMidia={setMidiaAberta}
+                />
+              </Fragment>
+            );
+          })}
       </div>
 
       {/* Aviso quando a IA ainda está ativa */}
