@@ -61,10 +61,13 @@ export function ListaConversas({
   const filtradas = useMemo(() => {
     const q = busca.trim().toLowerCase();
     if (!q) return conversas;
+    const qDigitos = q.replace(/\D/g, "");
     return conversas.filter((c) => {
       const nome = c.devedor?.nome_devedor?.toLowerCase() ?? "";
       const tel = c.telefone_normalizado;
-      return nome.includes(q) || tel.includes(q.replace(/\D/g, ""));
+      // Só casa por telefone quando há dígitos na busca — senão tel.includes("")
+      // seria sempre true e o filtro deixaria tudo passar.
+      return nome.includes(q) || (qDigitos.length > 0 && tel.includes(qDigitos));
     });
   }, [conversas, busca]);
 
