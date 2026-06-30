@@ -13,6 +13,8 @@ function invalidarFila(qc: ReturnType<typeof useQueryClient>) {
 export interface EnfileirarInput {
   devedorIds: number[];
   campanha?: string;
+  /** true = reenvio da 1ª mensagem (elegibilidade e pós-processamento diferentes). */
+  reenvio?: boolean;
 }
 
 export interface EnfileirarResult {
@@ -21,9 +23,14 @@ export interface EnfileirarResult {
   naoElegiveis: number;
 }
 
-// Enfileira apenas devedores com status pendente e que ainda não estejam
-// na fila ativa. Devolve um resumo para feedback ao operador.
+// Status bloqueados no reenvio (negociação ativa / acordo fechado).
+const STATUS_BLOQUEADO_REENVIO = ["em_negociacao", "acordo_aceito"];
+
+// Enfileira devedores elegíveis que ainda não estejam na fila ativa.
+// Modo inicial: exige status pendente. Modo reenvio: qualquer status exceto
+// negociação ativa / acordo fechado. Devolve um resumo para feedback.
 async function enfileirar(input: EnfileirarInput): Promise<EnfileirarResult> {
+  const ehReenvio = input.reenvio === true;
   const ids = Array.from(new Set(input.devedorIds)).filter((n) => n > 0);
   if (ids.length === 0) {
     return { enfileirados: 0, jaNaFila: 0, naoElegiveis: 0 };
@@ -31,7 +38,7 @@ async function enfileirar(input: EnfileirarInput): Promise<EnfileirarResult> {
 
   // Consulta em chunks de 200 para não estourar o tamanho da URL.
   const jaNaFilaSet = new Set<number>();
-  const pendentesSet = new Set<number>();
+  const elegiveisSet = new Set<number>();
   for (let i = 0; i < ids.length; i += 200) {
     const fatia = ids.slice(i, i + 200);
     // 1. Quais já estão na fila ativa.
@@ -43,20 +50,26 @@ async function enfileirar(input: EnfileirarInput): Promise<EnfileirarResult> {
     if (errExist) throw errExist;
     for (const r of existentes ?? []) jaNaFilaSet.add(r.devedor_id);
 
-    // 2. Quais são elegíveis (status pendente).
-    const { data: pendentes, error: errPend } = await supabase
-      .from("fran_devedores")
-      .select("id")
-      .eq("status_negociacao", "pendente")
-      .in("id", fatia);
-    if (errPend) throw errPend;
-    for (const r of pendentes ?? []) pendentesSet.add(r.id);
+    // 2. Quais são elegíveis para o modo.
+    let q = supabase.from("fran_devedores").select("id").in("id", fatia);
+    if (ehReenvio) {
+      q = q.not(
+        "status_negociacao",
+        "in",
+        `("${STATUS_BLOQUEADO_REENVIO.join('","')}")`
+      );
+    } else {
+      q = q.eq("status_negociacao", "pendente");
+    }
+    const { data: elegiveis, error: errEleg } = await q;
+    if (errEleg) throw errEleg;
+    for (const r of elegiveis ?? []) elegiveisSet.add(r.id);
   }
 
   const aInserir = ids.filter(
-    (id) => pendentesSet.has(id) && !jaNaFilaSet.has(id)
+    (id) => elegiveisSet.has(id) && !jaNaFilaSet.has(id)
   );
-  const naoElegiveis = ids.filter((id) => !pendentesSet.has(id)).length;
+  const naoElegiveis = ids.filter((id) => !elegiveisSet.has(id)).length;
 
   if (aInserir.length === 0) {
     return {
@@ -73,6 +86,7 @@ async function enfileirar(input: EnfileirarInput): Promise<EnfileirarResult> {
     devedor_id,
     campanha: input.campanha ?? null,
     enfileirado_por: usuarioId,
+    reenvio: ehReenvio,
   }));
 
   // Insert em chunks de 500.

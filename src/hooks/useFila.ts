@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import type { FilaItemComDevedor, StatusFila } from "@/lib/types";
 
 const SELECT =
-  "id,devedor_id,status,prioridade,campanha,tentativas,erro_detalhes,enfileirado_por,data_processado,created_at,updated_at," +
+  "id,devedor_id,status,prioridade,campanha,tentativas,reenvio,erro_detalhes,enfileirado_por,data_processado,created_at,updated_at," +
   "devedor:fran_devedores(id,nome_devedor,primeiro_nome,telefone,instituicao,valor_atualizado,status_negociacao)";
 
 async function fetchFila(status: StatusFila): Promise<FilaItemComDevedor[]> {

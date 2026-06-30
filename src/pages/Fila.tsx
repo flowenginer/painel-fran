@@ -245,7 +245,14 @@ export function Fila() {
                       {idx + 1}
                     </TableCell>
                     <TableCell className="font-medium">
-                      {item.devedor?.nome_devedor ?? `#${item.devedor_id}`}
+                      <span className="inline-flex items-center gap-2">
+                        {item.devedor?.nome_devedor ?? `#${item.devedor_id}`}
+                        {item.reenvio && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            reenvio
+                          </Badge>
+                        )}
+                      </span>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {item.devedor?.instituicao ?? "—"}

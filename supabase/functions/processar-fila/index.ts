@@ -470,6 +470,7 @@ interface FilaRow {
   devedor_id: number;
   campanha: string | null;
   tentativas: number;
+  reenvio: boolean;
   fran_devedores: DevedorRow | null;
 }
 
@@ -612,7 +613,7 @@ Deno.serve(async (req: Request) => {
     const filaResp = await rest(
       env,
       "GET",
-      `/fran_fila_disparo?status=eq.na_fila&select=id,devedor_id,campanha,tentativas,fran_devedores(*)&order=prioridade.asc,created_at.asc&limit=${limite}`
+      `/fran_fila_disparo?status=eq.na_fila&select=id,devedor_id,campanha,tentativas,reenvio,fran_devedores(*)&order=prioridade.asc,created_at.asc&limit=${limite}`
     );
     if (!filaResp.ok) {
       throw new Error(
@@ -632,7 +633,19 @@ Deno.serve(async (req: Request) => {
         inelegiveis.push({ id: item.id, motivo: "Devedor não encontrado" });
         continue;
       }
-      if (d.status_negociacao !== "pendente") {
+      if (item.reenvio) {
+        // Reenvio: bloqueia só negociação ativa e acordo fechado.
+        if (
+          d.status_negociacao === "acordo_aceito" ||
+          d.status_negociacao === "em_negociacao"
+        ) {
+          inelegiveis.push({
+            id: item.id,
+            motivo: `Reenvio bloqueado para status ${d.status_negociacao}`,
+          });
+          continue;
+        }
+      } else if (d.status_negociacao !== "pendente") {
         inelegiveis.push({
           id: item.id,
           motivo: `Status é ${d.status_negociacao ?? "indefinido"}, esperava pendente`,
@@ -668,14 +681,22 @@ Deno.serve(async (req: Request) => {
       return ocioso("nenhum_elegivel", { inelegiveis: inelegiveis.length });
     }
 
-    // Agrupa por campanha (itens podem ter campanhas diferentes). Na prática
-    // costuma ser uma só, mas mantemos correto enviando um payload por grupo.
-    const grupos = new Map<string, { devedor: DevedorRow; itemId: number }[]>();
+    // Agrupa por (reenvio, campanha) para o webhook ser homogêneo — disparo
+    // inicial e reenvio têm pós-processamento diferente.
+    type Grupo = {
+      reenvio: boolean;
+      campanha: string | null;
+      itens: { devedor: DevedorRow; itemId: number }[];
+    };
+    const grupos = new Map<string, Grupo>();
     for (const { item, devedor } of elegiveis) {
-      const chave = item.campanha ?? "";
-      const lista = grupos.get(chave) ?? [];
-      lista.push({ devedor, itemId: item.id });
-      grupos.set(chave, lista);
+      const chave = `${item.reenvio ? "R" : "I"}|${item.campanha ?? ""}`;
+      let g = grupos.get(chave);
+      if (!g) {
+        g = { reenvio: item.reenvio, campanha: item.campanha, itens: [] };
+        grupos.set(chave, g);
+      }
+      g.itens.push({ devedor, itemId: item.id });
     }
 
     let enviados = 0;
@@ -685,10 +706,11 @@ Deno.serve(async (req: Request) => {
     // Instâncias conectadas agora — só elas entram no rodízio de disparo.
     const conectadas = await lerCanaisConectados(env, statusUrl, statusSecret);
 
-    for (const [campanhaChave, grupo] of grupos) {
-      const campanha = campanhaChave || undefined;
-      const devedores = grupo.map((g) => g.devedor);
-      const itemIds = grupo.map((g) => g.itemId);
+    for (const grupo of grupos.values()) {
+      const campanha = grupo.campanha || undefined;
+      const ehReenvio = grupo.reenvio;
+      const devedores = grupo.itens.map((g) => g.devedor);
+      const itemIds = grupo.itens.map((g) => g.itemId);
       const devedorIds = devedores.map((d) => d.id);
 
       // Canal de disparo por devedor (rodízio ponderado por peso).
@@ -701,7 +723,7 @@ Deno.serve(async (req: Request) => {
       const webhook = await enviarWebhook(webhookUrl, {
         campanha,
         origem: "fila",
-        reenviar: false,
+        reenviar: ehReenvio,
         devedores: devedores.map((d) => {
           const c = canalPorDev.get(d.id);
           return {
@@ -748,25 +770,36 @@ Deno.serve(async (req: Request) => {
           },
           { Prefer: "return=minimal" }
         );
-        // Atualiza devedores: primeira mensagem enviada.
-        await rest(
-          env,
-          "PATCH",
-          `/fran_devedores?id=in.(${devedorIds.join(",")})`,
-          {
-            status_negociacao: "primeira_msg",
-            data_primeiro_disparo: agora,
-            data_ultimo_contato: agora,
-          },
-          { Prefer: "return=minimal" }
-        );
-        // Distribui os leads recém-disparados entre os operadores (round-robin).
-        await atribuirResponsaveis(env, devedorIds);
+        if (ehReenvio) {
+          // Reenvio: preserva status e responsável; só marca novo contato.
+          await rest(
+            env,
+            "PATCH",
+            `/fran_devedores?id=in.(${devedorIds.join(",")})`,
+            { data_ultimo_contato: agora },
+            { Prefer: "return=minimal" }
+          );
+        } else {
+          // Disparo inicial: primeira mensagem enviada.
+          await rest(
+            env,
+            "PATCH",
+            `/fran_devedores?id=in.(${devedorIds.join(",")})`,
+            {
+              status_negociacao: "primeira_msg",
+              data_primeiro_disparo: agora,
+              data_ultimo_contato: agora,
+            },
+            { Prefer: "return=minimal" }
+          );
+          // Distribui os leads recém-disparados entre os operadores (round-robin).
+          await atribuirResponsaveis(env, devedorIds);
+        }
       } else {
         erros += devedores.length;
         // Incrementa tentativas; se estourar o máximo, marca erro, senão
         // devolve para a fila para nova tentativa no próximo ciclo.
-        for (const g of grupo) {
+        for (const g of grupo.itens) {
           const tentativas =
             (elegiveis.find((e) => e.item.id === g.itemId)?.item.tentativas ??
               0) + 1;

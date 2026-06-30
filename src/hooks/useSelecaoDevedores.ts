@@ -28,7 +28,12 @@ export function useSelecaoDevedores() {
     });
   }, []);
 
+  // Substitui a seleção inteira (ex.: "selecionar todos do filtro").
+  const selecionarTodos = useCallback((ids: number[]) => {
+    setSelecionados(new Set(ids));
+  }, []);
+
   const limpar = useCallback(() => setSelecionados(new Set()), []);
 
-  return { selecionados, toggle, togglePagina, limpar };
+  return { selecionados, toggle, togglePagina, selecionarTodos, limpar };
 }

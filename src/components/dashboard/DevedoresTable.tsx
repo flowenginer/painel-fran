@@ -20,11 +20,24 @@ import {
 import {
   useDevedores,
   PAGE_SIZE,
+  STATUS_BLOQUEADO_REENVIO,
+  type ModoSelecao,
   type SortDirection,
   type SortField,
 } from "@/hooks/useDevedores";
 import type { DevedoresTableState } from "@/hooks/useDevedoresFilters";
-import type { Devedor } from "@/lib/types";
+import type { Devedor, StatusNegociacao } from "@/lib/types";
+
+/** Lead pode ser selecionado neste modo? */
+function ehElegivel(
+  status: StatusNegociacao | null | undefined,
+  modo: ModoSelecao
+): boolean {
+  if (modo === "reenvio") {
+    return !STATUS_BLOQUEADO_REENVIO.includes(status as StatusNegociacao);
+  }
+  return status === "pendente";
+}
 import { StatusBadge } from "./StatusBadge";
 import { SortableHead } from "./SortableHead";
 import { DevedorAcoes } from "./DevedorAcoes";
@@ -35,6 +48,8 @@ interface DevedoresTableProps {
   onSortChange: (field: SortField, direction: SortDirection) => void;
   hasFiltersAtivos: boolean;
   flashIds?: Set<number>;
+  // Modo de seleção: 'inicial' (pendentes) ou 'reenvio' (já contatados).
+  modo: ModoSelecao;
   // Suporte à seleção de pendentes para disparo (TASK-017).
   selecionados: Set<number>;
   onToggleSelecionado: (id: number) => void;
@@ -51,6 +66,7 @@ export function DevedoresTable({
   onSortChange,
   hasFiltersAtivos,
   flashIds,
+  modo,
   selecionados,
   onToggleSelecionado,
   onTogglePaginaAtual,
@@ -83,13 +99,13 @@ export function DevedoresTable({
         sub: "Use \"Adicionar Devedor\" para importar do Cedrus ou cadastrar manualmente.",
       };
 
-  // IDs elegíveis na página atual (status=pendente)
+  // IDs elegíveis na página atual conforme o modo.
   const idsElegiveisPagina = useMemo(
     () =>
       devedores
-        .filter((d) => d.status_negociacao === "pendente")
+        .filter((d) => ehElegivel(d.status_negociacao, modo))
         .map((d) => d.id),
-    [devedores]
+    [devedores, modo]
   );
   const temElegiveisPagina = idsElegiveisPagina.length > 0;
   const todosDaPaginaSelecionados =
@@ -180,7 +196,7 @@ export function DevedoresTable({
             {!isLoading &&
               !isError &&
               devedores.map((d) => {
-                const elegivel = d.status_negociacao === "pendente";
+                const elegivel = ehElegivel(d.status_negociacao, modo);
                 return (
                   <TableRow
                     key={d.id}
