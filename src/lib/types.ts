@@ -167,6 +167,7 @@ export interface FilaItem {
   prioridade: number;
   campanha: string | null;
   tentativas: number;
+  reenvio: boolean;
   erro_detalhes: string | null;
   enfileirado_por: string | null;
   data_processado: string | null;

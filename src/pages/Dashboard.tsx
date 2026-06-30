@@ -1,5 +1,13 @@
 import { useMemo, useState } from "react";
-import { ListPlus, Loader2, Plus, Send, Upload } from "lucide-react";
+import {
+  CheckCheck,
+  ListPlus,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Send,
+  Upload,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +21,7 @@ import { DevedoresTable } from "@/components/dashboard/DevedoresTable";
 import { FiltrosBar } from "@/components/dashboard/FiltrosBar";
 import { KpiCards } from "@/components/dashboard/KpiCards";
 import { DispararDialog } from "@/components/dashboard/DispararDialog";
+import { ReenviarFilaDialog } from "@/components/dashboard/ReenviarFilaDialog";
 import { EditarDevedorDialog } from "@/components/dashboard/EditarDevedorDialog";
 import { ReenviarMensagemDialog } from "@/components/dashboard/ReenviarMensagemDialog";
 import { RemoverDevedorDialog } from "@/components/dashboard/RemoverDevedorDialog";
@@ -22,6 +31,7 @@ import { useDevedoresFilters } from "@/hooks/useDevedoresFilters";
 import { useDevedoresRealtime } from "@/hooks/useDevedoresRealtime";
 import { useSelecaoDevedores } from "@/hooks/useSelecaoDevedores";
 import { useEnfileirar } from "@/hooks/useFilaMutations";
+import { fetchDevedoresIds, type ModoSelecao } from "@/hooks/useDevedores";
 import { useKpis } from "@/hooks/useKpis";
 import { useConfig } from "@/hooks/useConfig";
 import { useToast } from "@/hooks/use-toast";
@@ -41,14 +51,46 @@ export function Dashboard() {
   const { state, setFilters, setPage, setSort, clear, hasFiltersAtivos } =
     useDevedoresFilters();
   const flashIds = useDevedoresRealtime();
-  const { selecionados, toggle, togglePagina, limpar } = useSelecaoDevedores();
+  const { selecionados, toggle, togglePagina, selecionarTodos, limpar } =
+    useSelecaoDevedores();
   const enfileirar = useEnfileirar();
   const { toast } = useToast();
-  const { isAdmin } = useAuth();
+  const { isAdmin, temPermissao } = useAuth();
 
+  const podeReenvio = isAdmin || temPermissao("acao", "disparar");
+
+  const [modo, setModo] = useState<ModoSelecao>("inicial");
+  const [carregandoTodos, setCarregandoTodos] = useState(false);
+  const [reenviarFilaOpen, setReenviarFilaOpen] = useState(false);
   const [adicionarOpen, setAdicionarOpen] = useState(false);
   const [importarCsvOpen, setImportarCsvOpen] = useState(false);
   const [dispararOpen, setDispararOpen] = useState(false);
+
+  function trocarModo(m: ModoSelecao) {
+    setModo(m);
+    limpar();
+  }
+
+  async function selecionarTodosFiltro() {
+    setCarregandoTodos(true);
+    try {
+      const ids = await fetchDevedoresIds(state.filters, modo);
+      selecionarTodos(ids);
+      toast({
+        title: ids.length
+          ? `${ids.length} selecionado(s) do filtro`
+          : "Nenhum elegível no filtro atual",
+      });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao selecionar",
+        description: err instanceof Error ? err.message : "Erro desconhecido",
+      });
+    } finally {
+      setCarregandoTodos(false);
+    }
+  }
   const [editandoDevedor, setEditandoDevedor] = useState<Devedor | null>(null);
   const [reenviandoDevedor, setReenviandoDevedor] = useState<Devedor | null>(
     null
@@ -180,35 +222,84 @@ export function Dashboard() {
               </Button>
             </>
           )}
+          {podeReenvio && (
+            <div className="inline-flex rounded-md border p-0.5">
+              <Button
+                size="sm"
+                variant={modo === "inicial" ? "default" : "ghost"}
+                className="h-7"
+                onClick={() => trocarModo("inicial")}
+              >
+                Disparo inicial
+              </Button>
+              <Button
+                size="sm"
+                variant={modo === "reenvio" ? "default" : "ghost"}
+                className="h-7"
+                onClick={() => trocarModo("reenvio")}
+              >
+                Reenvio
+              </Button>
+            </div>
+          )}
           <Button
             variant="outline"
             size="sm"
-            disabled={selCount === 0 || enfileirar.isPending}
-            title="Adiciona os selecionados à fila de distribuição automática"
-            onClick={enviarParaFila}
+            disabled={carregandoTodos}
+            title="Seleciona todos os leads elegíveis que casam com o filtro atual (todas as páginas)"
+            onClick={selecionarTodosFiltro}
           >
-            {enfileirar.isPending ? (
+            {carregandoTodos ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
-              <ListPlus className="mr-2 h-4 w-4" />
+              <CheckCheck className="mr-2 h-4 w-4" />
             )}
-            Enviar para fila
-            {selCount > 0 && ` (${selCount})`}
+            Selecionar todos do filtro
           </Button>
-          <Button
-            size="sm"
-            disabled={!podeDisparar}
-            title={motivoBloqueio ?? undefined}
-            onClick={() => setDispararOpen(true)}
-          >
-            <Send className="mr-2 h-4 w-4" />
-            Disparar Campanha
-            {selCount > 0 && ` (${selCount})`}
-          </Button>
+          {modo === "inicial" ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={selCount === 0 || enfileirar.isPending}
+                title="Adiciona os selecionados à fila de distribuição automática"
+                onClick={enviarParaFila}
+              >
+                {enfileirar.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <ListPlus className="mr-2 h-4 w-4" />
+                )}
+                Enviar para fila
+                {selCount > 0 && ` (${selCount})`}
+              </Button>
+              <Button
+                size="sm"
+                disabled={!podeDisparar}
+                title={motivoBloqueio ?? undefined}
+                onClick={() => setDispararOpen(true)}
+              >
+                <Send className="mr-2 h-4 w-4" />
+                Disparar Campanha
+                {selCount > 0 && ` (${selCount})`}
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="sm"
+              disabled={selCount === 0}
+              title="Reenvia a 1ª mensagem pela fila (gotejamento)"
+              onClick={() => setReenviarFilaOpen(true)}
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Reenviar pela fila
+              {selCount > 0 && ` (${selCount})`}
+            </Button>
+          )}
         </div>
       </div>
 
-      {selCount > 0 && motivoBloqueio && (
+      {modo === "inicial" && selCount > 0 && motivoBloqueio && (
         <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-700 dark:text-yellow-400">
           ⚠ {motivoBloqueio}
         </div>
@@ -227,6 +318,13 @@ export function Dashboard() {
       <DispararDialog
         open={dispararOpen}
         onOpenChange={setDispararOpen}
+        devedorIds={idsParaDisparar}
+        onSuccess={limpar}
+      />
+
+      <ReenviarFilaDialog
+        open={reenviarFilaOpen}
+        onOpenChange={setReenviarFilaOpen}
         devedorIds={idsParaDisparar}
         onSuccess={limpar}
       />
@@ -272,6 +370,7 @@ export function Dashboard() {
             onSortChange={setSort}
             hasFiltersAtivos={hasFiltersAtivos}
             flashIds={flashIds}
+            modo={modo}
             selecionados={selecionados}
             onToggleSelecionado={toggle}
             onTogglePaginaAtual={togglePagina}
