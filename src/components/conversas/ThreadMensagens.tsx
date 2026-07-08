@@ -41,6 +41,7 @@ import { formatTelefone } from "@/lib/formatters";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { MensagemBubble } from "./MensagemBubble";
 import { Composer } from "./Composer";
+import { SugestaoPanel } from "./SugestaoPanel";
 import { TransferirConversaDialog } from "./TransferirConversaDialog";
 import {
   VisualizadorMidia,
@@ -174,7 +175,7 @@ export function ThreadMensagens({ conversa }: Props) {
       : "(sem identificação)");
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col">
       {/* Header */}
       <div className="flex shrink-0 items-center gap-3 border-b bg-background px-4 py-3">
         <Avatar className="h-10 w-10">
@@ -408,6 +409,9 @@ export function ThreadMensagens({ conversa }: Props) {
 
       {/* Visualizador de mídia (imagem/PDF) dentro do sistema */}
       <VisualizadorMidia midia={midiaAberta} onClose={() => setMidiaAberta(null)} />
+
+      {/* Assistente de sugestão de resposta (IA) — botão flutuante */}
+      <SugestaoPanel telefone={telefone} />
     </div>
   );
 }
