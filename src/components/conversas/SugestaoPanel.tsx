@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Copy, Loader2, RefreshCw, Send, Sparkles, X } from "lucide-react";
+import { Bot, Copy, Loader2, RefreshCw, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,10 +67,10 @@ export function SugestaoPanel({ telefone }: Props) {
     return (
       <Button
         onClick={abrir}
-        className="absolute bottom-20 right-4 z-10 h-11 w-11 rounded-full p-0 shadow-lg"
+        className="absolute bottom-20 right-4 z-10 h-11 w-11 rounded-full bg-orange-500 p-0 text-white shadow-lg hover:bg-orange-600"
         title="Sugestão de resposta (IA)"
       >
-        <Sparkles className="h-5 w-5" />
+        <Bot className="h-5 w-5" />
       </Button>
     );
   }
@@ -79,7 +79,7 @@ export function SugestaoPanel({ telefone }: Props) {
     <div className="absolute bottom-20 right-4 z-20 flex h-[26rem] w-80 max-w-[calc(100%-2rem)] flex-col rounded-lg border bg-background shadow-xl">
       <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
         <div className="flex items-center gap-1.5 text-sm font-medium">
-          <Sparkles className="h-4 w-4 text-primary" />
+          <Bot className="h-4 w-4 text-orange-500" />
           Sugestão de resposta
         </div>
         <button
