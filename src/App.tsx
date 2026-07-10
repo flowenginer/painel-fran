@@ -1,11 +1,11 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-
 import { Login } from "@/pages/Login";
 import { Dashboard } from "@/pages/Dashboard";
 import { Fila } from "@/pages/Fila";
 import { Conversas } from "@/pages/Conversas";
 import { Instituicoes } from "@/pages/Instituicoes";
 import { Whatsapp } from "@/pages/Whatsapp";
+import { Templates } from "@/pages/Templates";
 import { Configuracoes } from "@/pages/Configuracoes";
 import { Usuarios } from "@/pages/Usuarios";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -70,6 +70,14 @@ function App() {
             element={
               <PermissionRoute pagina="whatsapp">
                 <Whatsapp />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/templates"
+            element={
+              <PermissionRoute pagina="templates">
+                <Templates />
               </PermissionRoute>
             }
           />
