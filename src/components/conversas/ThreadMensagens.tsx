@@ -118,6 +118,11 @@ export function ThreadMensagens({ conversa }: Props) {
   const canalNome = canalInstancia
     ? canais?.find((c) => c.instancia === canalInstancia)?.nome ?? canalInstancia
     : null;
+  // Canal oficial = Meta Cloud API (Zernio); os demais são UAZAPI (não-oficial).
+  const ehCanalOficial = canalInstancia?.startsWith("zernio:") ?? false;
+  // Só mostra o nome amigável do número quando resolvido (nunca o ID cru).
+  const canalNomeAmigavel =
+    canalNome && canalNome !== canalInstancia ? canalNome : null;
 
   const iaBloqueada = conversa?.devedor?.status === STATUS_BLOCK_IA;
   const responsavelId = conversa?.devedor?.responsavel_id ?? null;
@@ -177,45 +182,69 @@ export function ThreadMensagens({ conversa }: Props) {
   return (
     <div className="relative flex h-full min-h-0 flex-col">
       {/* Header */}
-      <div className="flex shrink-0 items-center gap-3 border-b bg-background px-4 py-3">
-        <Avatar className="h-10 w-10">
+      <div className="flex shrink-0 items-start gap-3 border-b bg-background px-4 py-3">
+        <Avatar className="h-10 w-10 shrink-0">
           <AvatarFallback>{iniciais(nomeExibido)}</AvatarFallback>
         </Avatar>
+
+        {/* Identificação + metadados (ocupam a coluna esquerda, sem colidir) */}
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{nomeExibido}</p>
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Phone className="h-3 w-3" />
-            {conversa.devedor
-              ? formatTelefone(conversa.devedor.telefone)
-              : conversa.session_id_exibicao}
-            {conversa.devedor?.instituicao && (
-              <span className="ml-2 truncate">
-                · {conversa.devedor.instituicao}
-              </span>
-            )}
+            <Phone className="h-3 w-3 shrink-0" />
+            <span className="truncate">
+              {conversa.devedor
+                ? formatTelefone(conversa.devedor.telefone)
+                : conversa.session_id_exibicao}
+              {conversa.devedor?.instituicao && ` · ${conversa.devedor.instituicao}`}
+            </span>
           </p>
+
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {conversa.devedor && (
+              <Badge
+                variant="outline"
+                className="gap-1 text-[10px]"
+                title="Operador responsável por esta conversa"
+              >
+                <UserRound className="h-3 w-3" />
+                {responsavelNome ?? "Sem responsável"}
+              </Badge>
+            )}
+            {canalInstancia &&
+              (ehCanalOficial ? (
+                <Badge
+                  variant="outline"
+                  className="gap-1 border-green-500/40 bg-green-500/10 text-[10px] text-green-700 dark:text-green-400"
+                  title="Canal oficial — API do WhatsApp Business (Meta Cloud API via Zernio)"
+                >
+                  <ShieldCheck className="h-3 w-3" />
+                  Oficial
+                </Badge>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="gap-1 text-[10px]"
+                  title="Canal não-oficial (UAZAPI)"
+                >
+                  <Smartphone className="h-3 w-3" />
+                  Não-oficial{canalNomeAmigavel ? ` · ${canalNomeAmigavel}` : ""}
+                </Badge>
+              ))}
+            {conversa.devedor?.status_negociacao && (
+              <StatusBadge status={conversa.devedor.status_negociacao} />
+            )}
+            {iaBloqueada && (
+              <Badge className="gap-1 bg-destructive text-[10px] text-destructive-foreground hover:bg-destructive">
+                <Ban className="h-3 w-3" />
+                IA bloqueada
+              </Badge>
+            )}
+          </div>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          {conversa.devedor && (
-            <Badge
-              variant="outline"
-              className="gap-1 text-[10px]"
-              title="Operador responsável por esta conversa"
-            >
-              <UserRound className="h-3 w-3" />
-              {responsavelNome ?? "Sem responsável"}
-            </Badge>
-          )}
-          {canalNome && (
-            <Badge
-              variant="outline"
-              className="gap-1 text-[10px]"
-              title="Número de saída desta conversa (responde pelo mesmo canal)"
-            >
-              <Smartphone className="h-3 w-3" />
-              {canalNome}
-            </Badge>
-          )}
+
+        {/* Ações — fixas à direita, só ícone em telas estreitas */}
+        <div className="flex shrink-0 items-center gap-2">
           {podeTransferir && conversa.devedor && (
             <Button
               variant="outline"
@@ -223,18 +252,9 @@ export function ThreadMensagens({ conversa }: Props) {
               onClick={() => setTransferindo(true)}
               title="Transferir esta conversa para outro operador"
             >
-              <ArrowLeftRight className="mr-1.5 h-3.5 w-3.5" />
-              Transferir
+              <ArrowLeftRight className="h-3.5 w-3.5 sm:mr-1.5" />
+              <span className="hidden sm:inline">Transferir</span>
             </Button>
-          )}
-          {conversa.devedor?.status_negociacao && (
-            <StatusBadge status={conversa.devedor.status_negociacao} />
-          )}
-          {iaBloqueada && (
-            <Badge className="gap-1 bg-destructive text-[10px] text-destructive-foreground hover:bg-destructive">
-              <Ban className="h-3 w-3" />
-              IA bloqueada
-            </Badge>
           )}
           {conversa.devedor && (
             <Button
@@ -249,13 +269,15 @@ export function ThreadMensagens({ conversa }: Props) {
               }
             >
               {alterandoBlock ? (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" />
               ) : iaBloqueada ? (
-                <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />
+                <ShieldCheck className="h-3.5 w-3.5 sm:mr-1.5" />
               ) : (
-                <Ban className="mr-1.5 h-3.5 w-3.5" />
+                <Ban className="h-3.5 w-3.5 sm:mr-1.5" />
               )}
-              {iaBloqueada ? "Desbloquear IA" : "Bloquear IA"}
+              <span className="hidden sm:inline">
+                {iaBloqueada ? "Desbloquear IA" : "Bloquear IA"}
+              </span>
             </Button>
           )}
         </div>
@@ -331,8 +353,12 @@ export function ThreadMensagens({ conversa }: Props) {
         </div>
       )}
 
-      {/* Composer (envio de mensagem via n8n → UAZAPI) */}
-      <Composer telefoneNormalizado={telefone} disabled={!telefone} />
+      {/* Composer (roteia UAZAPI/Zernio pelo canal da conversa) */}
+      <Composer
+        telefoneNormalizado={telefone}
+        canal={canalInstancia}
+        disabled={!telefone}
+      />
 
       {/* Modal de confirmação Bloquear/Desbloquear IA */}
       <Dialog open={confirmandoToggle} onOpenChange={setConfirmandoToggle}>
