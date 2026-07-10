@@ -20,6 +20,7 @@ export const PAGINAS: PermissaoDef[] = [
   { id: "conversas", label: "Conversas", descricao: "Atendimento dos leads" },
   { id: "instituicoes", label: "Instituições" },
   { id: "whatsapp", label: "WhatsApp", descricao: "Conexão do número" },
+  { id: "templates", label: "Templates WA", descricao: "Templates WhatsApp Business (Zernio)" },
   { id: "configuracoes", label: "Configurações" },
 ];
 
