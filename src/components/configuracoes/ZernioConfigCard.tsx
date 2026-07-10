@@ -3,7 +3,7 @@
 // Permite ao admin trocar API Key, Account ID e Profile ID pelo painel,
 // sem precisar acessar o Supabase Dashboard ou os Secrets das Edge Functions.
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Eye, EyeOff, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
