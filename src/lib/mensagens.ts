@@ -1,4 +1,9 @@
-// Cliente da Edge Function enviar-mensagem (CRM chat: texto e mídia).
+// src/lib/mensagens.ts
+// Cliente de envio de mensagem do CRM (texto e mídia).
+// Roteia automaticamente para o canal correto:
+//   - Se o telefone tem conversa ativa no Zernio → chama zernio-enviar
+//   - Caso contrário → chama enviar-mensagem (UAZAPI via n8n)
+
 import { supabase } from "./supabase";
 
 export interface EnviarMensagemResp {
@@ -17,18 +22,30 @@ export interface EnviarInput {
   media_url?: string | null;
 }
 
-export async function enviarMensagem(
-  input: EnviarInput
-): Promise<EnviarMensagemResp> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session?.access_token) {
-    throw new Error("Sessão expirou. Faça login novamente.");
+// Verifica se o telefone tem uma conversa ativa no Zernio.
+// Consulta fran_zernio_conversas diretamente — índice único, muito rápido.
+async function isCanalZernio(telefone: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from("fran_zernio_conversas")
+      .select("id")
+      .eq("telefone", telefone)
+      .limit(1)
+      .maybeSingle();
+    if (error) return false;
+    return !!data;
+  } catch {
+    return false;
   }
+}
 
+// Envia via Zernio (API oficial)
+async function enviarViaZernio(
+  input: EnviarInput,
+  token: string
+): Promise<EnviarMensagemResp> {
   const { data, error } = await supabase.functions.invoke<EnviarMensagemResp>(
-    "enviar-mensagem",
+    "zernio-enviar",
     {
       body: {
         telefone: input.telefone,
@@ -36,7 +53,7 @@ export async function enviarMensagem(
         tipo: input.tipo ?? "texto",
         media_url: input.media_url ?? null,
       },
-      headers: { Authorization: `Bearer ${session.access_token}` },
+      headers: { Authorization: `Bearer ${token}` },
     }
   );
 
@@ -47,19 +64,70 @@ export async function enviarMensagem(
       try {
         const b = await ctx.json();
         if (b?.error && typeof b.error === "string") mensagem = b.error;
-      } catch {
-        /* ignora */
-      }
+      } catch { /* ignora */ }
     }
     throw new Error(
-      mensagem ??
-        (error instanceof Error ? error.message : "Falha ao enviar mensagem")
+      mensagem ?? (error instanceof Error ? error.message : "Falha ao enviar via Zernio")
+    );
+  }
+  if (!data) throw new Error("Resposta vazia do Zernio");
+  if (data.ok === false) throw new Error(data.error ?? "Falha no envio Zernio");
+  return data;
+}
+
+// Envia via UAZAPI (canal não-oficial)
+async function enviarViaUazapi(
+  input: EnviarInput,
+  token: string
+): Promise<EnviarMensagemResp> {
+  const { data, error } = await supabase.functions.invoke<EnviarMensagemResp>(
+    "enviar-mensagem",
+    {
+      body: {
+        telefone: input.telefone,
+        texto: input.texto ?? "",
+        tipo: input.tipo ?? "texto",
+        media_url: input.media_url ?? null,
+      },
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+
+  if (error) {
+    const ctx = (error as { context?: Response }).context;
+    let mensagem: string | null = null;
+    if (ctx && typeof ctx.json === "function") {
+      try {
+        const b = await ctx.json();
+        if (b?.error && typeof b.error === "string") mensagem = b.error;
+      } catch { /* ignora */ }
+    }
+    throw new Error(
+      mensagem ?? (error instanceof Error ? error.message : "Falha ao enviar mensagem")
     );
   }
   if (!data) throw new Error("Resposta vazia");
-  // Falha "de negócio" (ex.: UAZAPI recusou) vem como ok:false em HTTP 200.
-  if (data.ok === false) {
-    throw new Error(data.error ?? "Falha no envio");
-  }
+  if (data.ok === false) throw new Error(data.error ?? "Falha no envio");
   return data;
+}
+
+// Função principal — detecta o canal e roteia automaticamente
+export async function enviarMensagem(
+  input: EnviarInput
+): Promise<EnviarMensagemResp> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error("Sessão expirou. Faça login novamente.");
+  }
+
+  const usarZernio = await isCanalZernio(input.telefone);
+
+  if (usarZernio) {
+    console.log(`[enviarMensagem] Canal Zernio detectado para ${input.telefone}`);
+    return enviarViaZernio(input, session.access_token);
+  }
+
+  return enviarViaUazapi(input, session.access_token);
 }
