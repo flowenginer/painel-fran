@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowLeftRight,
   Ban,
+  Clock,
   Inbox,
   Loader2,
   MessageSquare,
@@ -38,6 +39,7 @@ import { useOperadores } from "@/hooks/useOperadores";
 import { useCanais } from "@/hooks/useCanais";
 import { nomeOperador } from "@/lib/conversas-transfer";
 import { formatTelefone } from "@/lib/formatters";
+import { formatDuracaoRestante } from "@/lib/dates";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { MensagemBubble } from "./MensagemBubble";
 import { Composer } from "./Composer";
@@ -106,6 +108,7 @@ export function ThreadMensagens({ conversa }: Props) {
   const [confirmandoToggle, setConfirmandoToggle] = useState(false);
   const [transferindo, setTransferindo] = useState(false);
   const [midiaAberta, setMidiaAberta] = useState<MidiaAberta | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const { mutateAsync: toggleBlock, isPending: alterandoBlock } =
     useToggleBlockIA();
   const { toast } = useToast();
@@ -123,6 +126,32 @@ export function ThreadMensagens({ conversa }: Props) {
   // Só mostra o nome amigável do número quando resolvido (nunca o ID cru).
   const canalNomeAmigavel =
     canalNome && canalNome !== canalInstancia ? canalNome : null;
+
+  // Janela de 24h (só canal oficial): no WhatsApp Business só se pode enviar
+  // texto livre até 24h após a última mensagem do lead (type "human"). Fora
+  // disso, apenas template. Computamos no cliente para travar o composer.
+  const WINDOW_MS = 24 * 60 * 60 * 1000;
+  const ultimoInboundMs = ehCanalOficial
+    ? (data ?? []).reduce<number | null>((max, m) => {
+        if (m.type !== "human" || !m.created_at) return max;
+        const t = new Date(m.created_at).getTime();
+        if (isNaN(t)) return max;
+        return max === null || t > max ? t : max;
+      }, null)
+    : null;
+  const expiraMs = ultimoInboundMs !== null ? ultimoInboundMs + WINDOW_MS : null;
+  const janelaAberta = expiraMs !== null && now < expiraMs;
+  const restanteMs = expiraMs !== null ? expiraMs - now : 0;
+  // UAZAPI nunca trava; oficial trava quando a janela não está aberta.
+  const janelaFechada = ehCanalOficial && !janelaAberta;
+
+  // Atualiza o "agora" a cada 30s para o timer decrementar e a janela virar
+  // "fechada" ao vivo. Só liga no canal oficial.
+  useEffect(() => {
+    if (!ehCanalOficial) return;
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, [ehCanalOficial]);
 
   const iaBloqueada = conversa?.devedor?.status === STATUS_BLOCK_IA;
   const responsavelId = conversa?.devedor?.responsavel_id ?? null;
@@ -229,6 +258,30 @@ export function ThreadMensagens({ conversa }: Props) {
                 >
                   <Smartphone className="h-3 w-3" />
                   Não-oficial{canalNomeAmigavel ? ` · ${canalNomeAmigavel}` : ""}
+                </Badge>
+              ))}
+            {ehCanalOficial &&
+              (janelaAberta ? (
+                <Badge
+                  variant="outline"
+                  className={`gap-1 text-[10px] ${
+                    restanteMs < 60 * 60 * 1000
+                      ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                      : "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400"
+                  }`}
+                  title="Tempo restante da janela de 24h para mensagem livre (WhatsApp oficial). Depois disso, só template."
+                >
+                  <Clock className="h-3 w-3" />
+                  Janela: {formatDuracaoRestante(restanteMs)}
+                </Badge>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="gap-1 border-muted-foreground/30 bg-muted text-[10px] text-muted-foreground"
+                  title="A janela de 24h fechou. Só é possível enviar um template aprovado; o texto livre reabre quando o lead responder."
+                >
+                  <Clock className="h-3 w-3" />
+                  Janela fechada
                 </Badge>
               ))}
             {conversa.devedor?.status_negociacao && (
@@ -353,11 +406,24 @@ export function ThreadMensagens({ conversa }: Props) {
         </div>
       )}
 
+      {/* Aviso de janela de 24h fechada (só canal oficial) */}
+      {janelaFechada && !isLoading && (
+        <div className="shrink-0 border-t bg-muted px-4 py-1.5 text-center text-[11px] text-muted-foreground">
+          Janela de 24h fechada. Mensagens livres ficam bloqueadas até o lead
+          responder — para reabrir agora, envie um{" "}
+          <a href="/templates" className="font-medium underline">
+            template aprovado
+          </a>
+          .
+        </div>
+      )}
+
       {/* Composer (roteia UAZAPI/Zernio pelo canal da conversa) */}
       <Composer
         telefoneNormalizado={telefone}
         canal={canalInstancia}
         disabled={!telefone}
+        janelaFechada={janelaFechada}
       />
 
       {/* Modal de confirmação Bloquear/Desbloquear IA */}
