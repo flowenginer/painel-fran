@@ -26,6 +26,8 @@ interface Props {
   telefoneNormalizado: string | null;
   /** Canal da conversa (ex.: "zernio:..."), para rotear o envio sem consulta extra. */
   canal?: string | null;
+  /** Canal oficial (Zernio) com a janela de 24h fechada: bloqueia texto/mídia livre. */
+  janelaFechada?: boolean;
   /** Desabilita o envio (ex.: conversa sem devedor identificado). */
   disabled?: boolean;
 }
@@ -36,7 +38,7 @@ interface Anexo {
   preview?: string;
 }
 
-export function Composer({ telefoneNormalizado, canal, disabled }: Props) {
+export function Composer({ telefoneNormalizado, canal, janelaFechada, disabled }: Props) {
   const [texto, setTexto] = useState("");
   const [anexo, setAnexo] = useState<Anexo | null>(null);
   const [audio, setAudio] = useState<{ blob: Blob; url: string } | null>(null);
@@ -52,7 +54,7 @@ export function Composer({ telefoneNormalizado, canal, disabled }: Props) {
   const { toast } = useToast();
 
   const temMidia = !!anexo || !!audio;
-  const bloqueado = disabled || !telefoneNormalizado;
+  const bloqueado = disabled || !telefoneNormalizado || !!janelaFechada;
   const podeEnviar =
     !bloqueado &&
     !enviando &&
@@ -253,11 +255,13 @@ export function Composer({ telefoneNormalizado, canal, disabled }: Props) {
           onChange={(e) => setTexto(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder={
-            bloqueado
-              ? "Conversa sem devedor identificado"
-              : temMidia
-                ? "Legenda (opcional)…"
-                : "Escreva uma mensagem... (Enter envia, Shift+Enter quebra linha)"
+            janelaFechada
+              ? "Janela de 24h fechada — envie um template para reabrir"
+              : bloqueado
+                ? "Conversa sem devedor identificado"
+                : temMidia
+                  ? "Legenda (opcional)…"
+                  : "Escreva uma mensagem... (Enter envia, Shift+Enter quebra linha)"
           }
           disabled={bloqueado || gravando}
           rows={1}

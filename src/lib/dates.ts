@@ -46,3 +46,14 @@ export function horaAtualSaoPaulo(): { hora: number; minuto: number } {
   const minuto = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
   return { hora, minuto };
 }
+
+// Duração restante (em ms) de forma amigável. Independe de timezone (é uma
+// diferença, não uma hora de relógio). Ex.: "23h 47m" | "47m" | "menos de 1 min".
+export function formatDuracaoRestante(ms: number): string {
+  if (ms <= 0) return "expirada";
+  const totalMin = Math.floor(ms / 60_000);
+  if (totalMin < 1) return "menos de 1 min";
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h >= 1 ? `${h}h ${m}m` : `${m}m`;
+}
