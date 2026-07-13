@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   ListOrdered,
   FileText,
+  Megaphone,
   MessageSquare,
   Settings,
   Smartphone,
@@ -27,6 +28,7 @@ export const navItems: NavItem[] = [
   { to: "/instituicoes", id: "instituicoes", label: "Instituições", icon: Building2 },
   { to: "/whatsapp", id: "whatsapp", label: "WhatsApp", icon: Smartphone },
   { to: "/templates", id: "templates", label: "Templates WA", icon: FileText },
+  { to: "/broadcasts", id: "broadcasts", label: "Broadcasts", icon: Megaphone },
   { to: "/configuracoes", id: "configuracoes", label: "Configurações", icon: Settings },
   { to: "/usuarios", id: "usuarios", label: "Usuários", icon: Users, adminOnly: true },
 ];
