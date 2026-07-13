@@ -67,6 +67,26 @@ async function zernioFetch(apiKey: string, method: string, path: string, body?: 
   });
 }
 
+// A API do Zernio espera os tipos dos componentes em minúsculo (ex.: "body",
+// "header", "footer", "buttons") — e o mesmo para o "type" de cada botão e o
+// "format". O front monta em maiúsculo (padrão Meta), então normalizamos aqui.
+function normalizarComponentes(components: unknown): unknown {
+  if (!Array.isArray(components)) return components;
+  return components.map((c) => {
+    const comp = { ...(c as Record<string, unknown>) };
+    if (typeof comp.type === "string") comp.type = comp.type.toLowerCase();
+    if (typeof comp.format === "string") comp.format = comp.format.toLowerCase();
+    if (Array.isArray(comp.buttons)) {
+      comp.buttons = comp.buttons.map((b) => {
+        const btn = { ...(b as Record<string, unknown>) };
+        if (typeof btn.type === "string") btn.type = btn.type.toLowerCase();
+        return btn;
+      });
+    }
+    return comp;
+  });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return jsonErr({ error: "Metodo nao permitido" }, 405);
@@ -96,7 +116,14 @@ Deno.serve(async (req: Request) => {
       if (!(await verificarAdmin(env, userId))) return jsonErr({ error: "Apenas admins podem criar templates" }, 403);
       const { name, category, language, components } = body;
       if (!name || !category || !language || !components) return jsonErr({ error: "name, category, language e components sao obrigatorios" }, 400);
-      const zernioPayload = { profileId: cfg.zernioProfileId, accountId: cfg.zernioAccountId, name, category, language, components };
+      // Formato que a API do Zernio aceita: sem profileId, tipos em minúsculo.
+      const zernioPayload = {
+        accountId: cfg.zernioAccountId,
+        name,
+        category,
+        language,
+        components: normalizarComponentes(components),
+      };
       const resp = await zernioFetch(cfg.zernioApiKey, "POST", "/v1/whatsapp/templates", zernioPayload);
       const respText = await resp.text().catch(() => "");
       if (!resp.ok) return jsonErr({ error: `Zernio erro ${resp.status}: ${respText}` }, 502);
