@@ -20,6 +20,11 @@ export interface EnviarInput {
   texto?: string;
   tipo?: TipoEnvio;
   media_url?: string | null;
+  /**
+   * Canal já conhecido da conversa (ex.: "zernio:..." ou instância UAZAPI).
+   * Quando informado, evita a consulta extra ao banco para descobrir o canal.
+   */
+  canal?: string | null;
 }
 
 // Verifica se o telefone tem uma conversa ativa no Zernio.
@@ -122,10 +127,14 @@ export async function enviarMensagem(
     throw new Error("Sessão expirou. Faça login novamente.");
   }
 
-  const usarZernio = await isCanalZernio(input.telefone);
+  // Roteia pelo canal já conhecido da conversa (sem ida ao banco); só consulta
+  // a fran_zernio_conversas como fallback quando o canal não foi informado.
+  const usarZernio =
+    input.canal != null
+      ? input.canal.startsWith("zernio:")
+      : await isCanalZernio(input.telefone);
 
   if (usarZernio) {
-    console.log(`[enviarMensagem] Canal Zernio detectado para ${input.telefone}`);
     return enviarViaZernio(input, session.access_token);
   }
 

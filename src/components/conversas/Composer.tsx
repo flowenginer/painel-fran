@@ -24,6 +24,8 @@ import { EmojiPicker } from "./EmojiPicker";
 
 interface Props {
   telefoneNormalizado: string | null;
+  /** Canal da conversa (ex.: "zernio:..."), para rotear o envio sem consulta extra. */
+  canal?: string | null;
   /** Desabilita o envio (ex.: conversa sem devedor identificado). */
   disabled?: boolean;
 }
@@ -34,7 +36,7 @@ interface Anexo {
   preview?: string;
 }
 
-export function Composer({ telefoneNormalizado, disabled }: Props) {
+export function Composer({ telefoneNormalizado, canal, disabled }: Props) {
   const [texto, setTexto] = useState("");
   const [anexo, setAnexo] = useState<Anexo | null>(null);
   const [audio, setAudio] = useState<{ blob: Blob; url: string } | null>(null);
@@ -46,7 +48,7 @@ export function Composer({ telefoneNormalizado, disabled }: Props) {
   const mrRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  const { mutateAsync } = useEnviarMensagem(telefoneNormalizado);
+  const { mutateAsync } = useEnviarMensagem(telefoneNormalizado, canal);
   const { toast } = useToast();
 
   const temMidia = !!anexo || !!audio;
@@ -113,11 +115,22 @@ export function Composer({ telefoneNormalizado, disabled }: Props) {
     const caption = texto.trim();
     if (!temMidia && !caption) return;
 
+    // Texto puro: envio otimista — limpa o campo na hora e não bloqueia.
+    // A bolha aparece imediatamente (onMutate) e o request roda em background.
+    if (!temMidia) {
+      setTexto("");
+      taRef.current?.focus();
+      mutateAsync({ texto: caption }).catch(() => {
+        /* erro já tratado no onError da mutation */
+      });
+      return;
+    }
+
+    // Mídia: precisa subir o arquivo antes de enviar, então mantém o spinner.
     setEnviando(true);
     let tipo: TipoEnvio = "texto";
     let mediaUrl: string | null = null;
 
-    // 1. Upload da mídia (se houver).
     try {
       if (audio) {
         tipo = "audio";
@@ -136,13 +149,8 @@ export function Composer({ telefoneNormalizado, disabled }: Props) {
       return;
     }
 
-    // 2. Envia (a mutation já mostra toast de erro próprio).
     try {
-      await mutateAsync(
-        tipo === "texto"
-          ? { texto: caption }
-          : { tipo, media_url: mediaUrl, texto: caption }
-      );
+      await mutateAsync({ tipo, media_url: mediaUrl, texto: caption });
       setTexto("");
       setAnexo(null);
       setAudio(null);
