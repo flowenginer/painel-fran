@@ -21,6 +21,7 @@ export const PAGINAS: PermissaoDef[] = [
   { id: "instituicoes", label: "Instituições" },
   { id: "whatsapp", label: "WhatsApp", descricao: "Conexão do número" },
   { id: "templates", label: "Templates WA", descricao: "Templates WhatsApp Business (Zernio)" },
+  { id: "broadcasts", label: "Broadcasts", descricao: "Disparo em massa via template oficial" },
   { id: "configuracoes", label: "Configurações" },
 ];
 
@@ -33,6 +34,7 @@ export const ACOES: PermissaoDef[] = [
   { id: "editar_devedor", label: "Editar devedor" },
   { id: "remover_devedor", label: "Remover devedor" },
   { id: "gerenciar_fila", label: "Gerenciar fila", descricao: "Configurar e processar a fila" },
+  { id: "gerenciar_broadcasts", label: "Gerenciar broadcasts", descricao: "Criar e disparar broadcasts" },
   { id: "gerenciar_instituicoes", label: "Gerenciar instituições" },
   { id: "gerenciar_whatsapp", label: "Gerenciar conexão WhatsApp" },
   { id: "gerenciar_config", label: "Alterar configurações" },

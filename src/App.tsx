@@ -6,6 +6,7 @@ import { Conversas } from "@/pages/Conversas";
 import { Instituicoes } from "@/pages/Instituicoes";
 import { Whatsapp } from "@/pages/Whatsapp";
 import { Templates } from "@/pages/Templates";
+import { Broadcasts } from "@/pages/Broadcasts";
 import { Configuracoes } from "@/pages/Configuracoes";
 import { Usuarios } from "@/pages/Usuarios";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -78,6 +79,14 @@ function App() {
             element={
               <PermissionRoute pagina="templates">
                 <Templates />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/broadcasts"
+            element={
+              <PermissionRoute pagina="broadcasts">
+                <Broadcasts />
               </PermissionRoute>
             }
           />
