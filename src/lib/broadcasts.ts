@@ -80,6 +80,8 @@ export interface CriarBroadcastInput {
   nome: string;
   template_name: string;
   template_language: string;
+  /** Corpo do template (com {{n}}) — guardado para exibir o texto real enviado. */
+  template_body: string;
   /** Mapa "1" -> id de campo do devedor. */
   variaveis: Record<string, string>;
   devedor_ids: number[];
@@ -117,6 +119,7 @@ export async function criarBroadcast(
       nome: input.nome.trim(),
       template_name: input.template_name,
       template_language: input.template_language,
+      template_body: input.template_body,
       variaveis: input.variaveis,
       status: "rascunho",
       criado_por: user?.id ?? null,
