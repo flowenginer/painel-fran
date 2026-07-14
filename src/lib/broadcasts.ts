@@ -82,6 +82,8 @@ export interface CriarBroadcastInput {
   template_language: string;
   /** Corpo do template (com {{n}}) — guardado para exibir o texto real enviado. */
   template_body: string;
+  /** Ritmo de envio desta campanha, em mensagens por hora. */
+  por_hora: number;
   /** Mapa "1" -> id de campo do devedor. */
   variaveis: Record<string, string>;
   devedor_ids: number[];
@@ -120,8 +122,10 @@ export async function criarBroadcast(
       template_name: input.template_name,
       template_language: input.template_language,
       template_body: input.template_body,
+      por_hora: input.por_hora,
       variaveis: input.variaveis,
-      status: "rascunho",
+      // Já entra ativo: o envio começa sozinho no ritmo configurado.
+      status: "ativo",
       criado_por: user?.id ?? null,
     })
     .select("id")

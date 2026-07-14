@@ -10,7 +10,6 @@ import {
   Info,
   Loader2,
   Megaphone,
-  Play,
   Send,
   Users,
 } from "lucide-react";
@@ -71,7 +70,8 @@ export function Broadcasts() {
   const [variaveis, setVariaveis] = useState<Record<string, string>>({});
   const [criando, setCriando] = useState(false);
   const [carregandoTodos, setCarregandoTodos] = useState(false);
-  const [processando, setProcessando] = useState(false);
+  // Ritmo de envio da campanha (mensagens/hora).
+  const [ritmo, setRitmo] = useState("60");
 
   const { selecionados, toggle, togglePagina, selecionarTodos, limpar } =
     useSelecaoDevedores();
@@ -134,38 +134,6 @@ export function Broadcasts() {
     }
   }
 
-  async function handleProcessar() {
-    setProcessando(true);
-    try {
-      const r = await zernio.broadcast.processar();
-      if (r.ativo === false) {
-        toast({
-          variant: "destructive",
-          title: "Processamento desligado",
-          description:
-            "Ligue a chave zernio_broadcast_ativo (fran_config) para começar a enviar.",
-        });
-      } else {
-        toast({
-          variant: "success",
-          title: "Fila processada",
-          description: `${r.enviados ?? 0} enviado(s), ${r.erros ?? 0} erro(s). Hora: ${
-            r.enviadosHora ?? 0
-          }/${r.porHora ?? "-"} · Dia: ${r.enviadosDia ?? 0}/${r.limiteDiario ?? "-"}.`,
-        });
-      }
-      qc.invalidateQueries({ queryKey: ["broadcasts"] });
-    } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "Erro ao processar fila",
-        description: e instanceof Error ? e.message : "Falha desconhecida",
-      });
-    } finally {
-      setProcessando(false);
-    }
-  }
-
   async function handleCriar() {
     if (!template) return;
     setCriando(true);
@@ -175,17 +143,31 @@ export function Broadcasts() {
         template_name: template.name,
         template_language: template.language,
         template_body: bodyText,
+        por_hora: Math.max(1, Number(ritmo) || 60),
         variaveis,
         devedor_ids: Array.from(selecionados),
       });
+
+      // Dispara o primeiro lote na hora; o resto sai sozinho no ritmo.
+      let aviso = "";
+      try {
+        const r = await zernio.broadcast.processar();
+        if (r.ativo === false) {
+          aviso =
+            " Envio automático está DESLIGADO — ligue a chave zernio_broadcast_ativo (fran_config).";
+        }
+      } catch {
+        aviso = " (o primeiro lote sairá no próximo ciclo do processador)";
+      }
+
       toast({
         variant: "success",
-        title: "Broadcast criado",
-        description: `${res.total_alvos} alvo(s) enfileirado(s).${
+        title: "Broadcast criado e enviando",
+        description: `${res.total_alvos} alvo(s) na fila.${
           res.sem_telefone > 0
-            ? ` ${res.sem_telefone} sem telefone foram ignorados.`
+            ? ` ${res.sem_telefone} sem telefone ignorados.`
             : ""
-        }`,
+        }${aviso}`,
       });
       setNome("");
       setVariaveis({});
@@ -216,13 +198,13 @@ export function Broadcasts() {
         </div>
       </div>
 
-      {/* Aviso: envio é fase 2 */}
+      {/* Como funciona o envio */}
       <div className="flex items-start gap-2 rounded-md border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-700 dark:text-blue-300">
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
         <p>
-          Ao criar, os alvos são <strong>enfileirados</strong>. O envio
-          automático — respeitando limite diário e janela de horário — é feito
-          pelo processador em segundo plano. Requer um template{" "}
+          Ao criar, o envio <strong>começa sozinho</strong> e goteja no{" "}
+          <strong>ritmo escolhido</strong> (para proteger o número oficial na
+          Meta). Acompanhe pela barra de progresso abaixo. Requer um template{" "}
           <strong>aprovado pela Meta</strong>.
         </p>
       </div>
@@ -231,30 +213,11 @@ export function Broadcasts() {
       {broadcasts.length > 0 && (
         <Card>
           <CardHeader>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <CardTitle className="text-base">Histórico de broadcasts</CardTitle>
-                <CardDescription className="text-xs">
-                  Campanhas criadas e o andamento do envio.
-                </CardDescription>
-              </div>
-              {podeGerenciar && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleProcessar}
-                  disabled={processando}
-                  title="Envia agora um lote da fila (respeita os limites configurados)."
-                >
-                  {processando ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Play className="mr-2 h-4 w-4" />
-                  )}
-                  Processar fila agora
-                </Button>
-              )}
-            </div>
+            <CardTitle className="text-base">Histórico de broadcasts</CardTitle>
+            <CardDescription className="text-xs">
+              O envio começa sozinho ao criar e goteja no ritmo escolhido. A
+              barra mostra o progresso ao vivo.
+            </CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <Table>
@@ -266,6 +229,7 @@ export function Broadcasts() {
                   <TableHead className="text-right">Enviados</TableHead>
                   <TableHead className="text-right">Na fila</TableHead>
                   <TableHead className="text-right">Erros</TableHead>
+                  <TableHead className="min-w-[160px]">Progresso</TableHead>
                   <TableHead>Criado</TableHead>
                 </TableRow>
               </TableHeader>
@@ -290,6 +254,45 @@ export function Broadcasts() {
                       </TableCell>
                       <TableCell className="text-right text-destructive">
                         {b.total_erros}
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          const feitos = b.total_enviados + b.total_erros;
+                          const pct =
+                            b.total_alvos > 0
+                              ? Math.round((feitos / b.total_alvos) * 100)
+                              : 0;
+                          const enviando = b.status === "ativo" && naFila > 0;
+                          return (
+                            <div className="space-y-1">
+                              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    b.status === "concluido"
+                                      ? "bg-green-500"
+                                      : "bg-primary"
+                                  }`}
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                {enviando && (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                )}
+                                <span>
+                                  {pct}%
+                                  {enviando
+                                    ? " · enviando"
+                                    : b.status === "concluido"
+                                      ? " · concluído"
+                                      : b.status === "pausado"
+                                        ? " · pausado"
+                                        : ""}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {new Intl.DateTimeFormat("pt-BR", {
@@ -371,6 +374,25 @@ export function Broadcasts() {
                     {bodyText || "(template sem corpo de texto)"}
                   </div>
                 )}
+
+                <div className="space-y-1.5">
+                  <Label>Ritmo de envio</Label>
+                  <Select value={ritmo} onValueChange={setRitmo}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="30">Devagar — 30/hora</SelectItem>
+                      <SelectItem value="60">Normal — 60/hora</SelectItem>
+                      <SelectItem value="120">Rápido — 120/hora</SelectItem>
+                      <SelectItem value="240">Muito rápido — 240/hora</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Gotejamento para proteger o número oficial. Um ritmo alto
+                    demais pode fazer a Meta restringir o número.
+                  </p>
+                </div>
               </CardContent>
             </Card>
 

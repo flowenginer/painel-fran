@@ -87,12 +87,10 @@ export interface ProcessarBroadcastResult {
   ok: boolean;
   ativo?: boolean;
   mensagem?: string;
-  processados?: number;
   enviados?: number;
   erros?: number;
-  enviadosHora?: number;
+  campanhas?: number;
   enviadosDia?: number;
-  porHora?: number;
   limiteDiario?: number;
 }
 
