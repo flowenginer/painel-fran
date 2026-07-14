@@ -10,6 +10,7 @@ import {
   Info,
   Loader2,
   Megaphone,
+  Play,
   Send,
   Users,
 } from "lucide-react";
@@ -70,6 +71,7 @@ export function Broadcasts() {
   const [variaveis, setVariaveis] = useState<Record<string, string>>({});
   const [criando, setCriando] = useState(false);
   const [carregandoTodos, setCarregandoTodos] = useState(false);
+  const [processando, setProcessando] = useState(false);
 
   const { selecionados, toggle, togglePagina, selecionarTodos, limpar } =
     useSelecaoDevedores();
@@ -129,6 +131,38 @@ export function Broadcasts() {
       });
     } finally {
       setCarregandoTodos(false);
+    }
+  }
+
+  async function handleProcessar() {
+    setProcessando(true);
+    try {
+      const r = await zernio.broadcast.processar();
+      if (r.ativo === false) {
+        toast({
+          variant: "destructive",
+          title: "Processamento desligado",
+          description:
+            "Ligue a chave zernio_broadcast_ativo (fran_config) para começar a enviar.",
+        });
+      } else {
+        toast({
+          variant: "success",
+          title: "Fila processada",
+          description: `${r.enviados ?? 0} enviado(s), ${r.erros ?? 0} erro(s). Hora: ${
+            r.enviadosHora ?? 0
+          }/${r.porHora ?? "-"} · Dia: ${r.enviadosDia ?? 0}/${r.limiteDiario ?? "-"}.`,
+        });
+      }
+      qc.invalidateQueries({ queryKey: ["broadcasts"] });
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao processar fila",
+        description: e instanceof Error ? e.message : "Falha desconhecida",
+      });
+    } finally {
+      setProcessando(false);
     }
   }
 
@@ -196,10 +230,30 @@ export function Broadcasts() {
       {broadcasts.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Histórico de broadcasts</CardTitle>
-            <CardDescription className="text-xs">
-              Campanhas criadas e o andamento do envio.
-            </CardDescription>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">Histórico de broadcasts</CardTitle>
+                <CardDescription className="text-xs">
+                  Campanhas criadas e o andamento do envio.
+                </CardDescription>
+              </div>
+              {podeGerenciar && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleProcessar}
+                  disabled={processando}
+                  title="Envia agora um lote da fila (respeita os limites configurados)."
+                >
+                  {processando ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Play className="mr-2 h-4 w-4" />
+                  )}
+                  Processar fila agora
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <Table>
