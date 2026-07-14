@@ -238,12 +238,13 @@ export function ThreadMensagens({ conversa }: Props) {
   return (
     <div className="relative flex h-full min-h-0 flex-col">
       {/* Header */}
-      <div className="flex shrink-0 items-start gap-3 border-b bg-background px-4 py-3">
+      <div className="flex shrink-0 flex-col gap-2 border-b bg-background px-4 py-3">
+        <div className="flex items-start gap-3">
         <Avatar className="h-10 w-10 shrink-0">
           <AvatarFallback>{iniciais(nomeExibido)}</AvatarFallback>
         </Avatar>
 
-        {/* Identificação + metadados (ocupam a coluna esquerda, sem colidir) */}
+        {/* Identificação (nome + telefone) */}
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{nomeExibido}</p>
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -256,71 +257,6 @@ export function ThreadMensagens({ conversa }: Props) {
             </span>
           </p>
 
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            {conversa.devedor && (
-              <Badge
-                variant="outline"
-                className="gap-1 text-[10px]"
-                title="Operador responsável por esta conversa"
-              >
-                <UserRound className="h-3 w-3" />
-                {responsavelNome ?? "Sem responsável"}
-              </Badge>
-            )}
-            {canalSelecionado &&
-              (ehCanalOficial ? (
-                <Badge
-                  variant="outline"
-                  className="gap-1 border-green-500/40 bg-green-500/10 text-[10px] text-green-700 dark:text-green-400"
-                  title="Canal oficial — API do WhatsApp Business (Meta Cloud API via Zernio)"
-                >
-                  <ShieldCheck className="h-3 w-3" />
-                  Oficial
-                </Badge>
-              ) : (
-                <Badge
-                  variant="outline"
-                  className="gap-1 text-[10px]"
-                  title="Canal não-oficial (UAZAPI)"
-                >
-                  <Smartphone className="h-3 w-3" />
-                  Não-oficial{canalNomeAmigavel ? ` · ${canalNomeAmigavel}` : ""}
-                </Badge>
-              ))}
-            {ehCanalOficial &&
-              (janelaAberta ? (
-                <Badge
-                  variant="outline"
-                  className={`gap-1 text-[10px] ${
-                    restanteMs < 60 * 60 * 1000
-                      ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                      : "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400"
-                  }`}
-                  title="Tempo restante da janela de 24h para mensagem livre (WhatsApp oficial). Depois disso, só template."
-                >
-                  <Clock className="h-3 w-3" />
-                  Janela: {formatDuracaoRestante(restanteMs)}
-                </Badge>
-              ) : (
-                <Badge
-                  variant="outline"
-                  className="gap-1 border-muted-foreground/30 bg-muted text-[10px] text-muted-foreground"
-                  title="A janela de 24h fechou. Só é possível enviar um template aprovado; o texto livre reabre quando o lead responder."
-                >
-                  <Clock className="h-3 w-3" />
-                  Janela fechada
-                </Badge>
-              ))}
-            {conversa.devedor?.status_negociacao && (
-              <StatusBadge status={conversa.devedor.status_negociacao} />
-            )}
-            {iaBloqueada && (
-              <Badge className="gap-1 bg-destructive text-[10px] text-destructive-foreground hover:bg-destructive">
-                <Ban className="h-3 w-3" />
-                IA bloqueada
-              </Badge>
-            )}
-          </div>
         </div>
 
         {/* Ações — fixas à direita, só ícone em telas estreitas */}
@@ -410,6 +346,74 @@ export function ThreadMensagens({ conversa }: Props) {
                 {iaBloqueada ? "Desbloquear IA" : "Bloquear IA"}
               </span>
             </Button>
+          )}
+        </div>
+        </div>
+
+        {/* Tags do lead — linha própria de largura total (não empilham) */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {conversa.devedor && (
+            <Badge
+              variant="outline"
+              className="gap-1 text-[10px]"
+              title="Operador responsável por esta conversa"
+            >
+              <UserRound className="h-3 w-3" />
+              {responsavelNome ?? "Sem responsável"}
+            </Badge>
+          )}
+          {canalSelecionado &&
+            (ehCanalOficial ? (
+              <Badge
+                variant="outline"
+                className="gap-1 border-green-500/40 bg-green-500/10 text-[10px] text-green-700 dark:text-green-400"
+                title="Canal oficial — API do WhatsApp Business (Meta Cloud API via Zernio)"
+              >
+                <ShieldCheck className="h-3 w-3" />
+                Oficial
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className="gap-1 text-[10px]"
+                title="Canal não-oficial (UAZAPI)"
+              >
+                <Smartphone className="h-3 w-3" />
+                Não-oficial{canalNomeAmigavel ? ` · ${canalNomeAmigavel}` : ""}
+              </Badge>
+            ))}
+          {ehCanalOficial &&
+            (janelaAberta ? (
+              <Badge
+                variant="outline"
+                className={`gap-1 text-[10px] ${
+                  restanteMs < 60 * 60 * 1000
+                    ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                    : "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400"
+                }`}
+                title="Tempo restante da janela de 24h para mensagem livre (WhatsApp oficial). Depois disso, só template."
+              >
+                <Clock className="h-3 w-3" />
+                Janela: {formatDuracaoRestante(restanteMs)}
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className="gap-1 border-muted-foreground/30 bg-muted text-[10px] text-muted-foreground"
+                title="A janela de 24h fechou. Só é possível enviar um template aprovado; o texto livre reabre quando o lead responder."
+              >
+                <Clock className="h-3 w-3" />
+                Janela fechada
+              </Badge>
+            ))}
+          {conversa.devedor?.status_negociacao && (
+            <StatusBadge status={conversa.devedor.status_negociacao} />
+          )}
+          {iaBloqueada && (
+            <Badge className="gap-1 bg-destructive text-[10px] text-destructive-foreground hover:bg-destructive">
+              <Ban className="h-3 w-3" />
+              IA bloqueada
+            </Badge>
           )}
         </div>
       </div>

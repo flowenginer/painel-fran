@@ -163,11 +163,36 @@ function renderCorpo(corpo: string, variaveis: Record<string, string> | null | u
 
 const MAX_TENTATIVAS = 3;
 
+// Busca no Zernio o corpo (texto) de cada template aprovado, uma vez por
+// invocação. Usado para mostrar em Conversas o TEXTO REAL enviado mesmo em
+// campanhas antigas (criadas antes de guardarmos o corpo na própria campanha).
+async function buscarTemplatesBody(apiKey: string, accountId: string): Promise<Map<string, string>> {
+  const mapa = new Map<string, string>();
+  try {
+    const resp = await fetch(
+      `https://zernio.com/api/v1/whatsapp/templates?accountId=${encodeURIComponent(accountId)}`,
+      { headers: { Authorization: `Bearer ${apiKey}` } },
+    );
+    if (resp.ok) {
+      const data = (await resp.json().catch(() => ({}))) as { templates?: Array<Record<string, any>> };
+      for (const t of data.templates ?? []) {
+        const comps = Array.isArray(t.components) ? t.components : [];
+        const body = comps.find((c: Record<string, any>) => String(c.type).toLowerCase() === "body");
+        if (t.name && body?.text) mapa.set(String(t.name), String(body.text));
+      }
+    }
+  } catch (e) {
+    console.error("[zernio-broadcast] Falha ao buscar templates:", e);
+  }
+  return mapa;
+}
+
 async function processarItem(
   env: Env,
   apiKey: string,
   accountId: string,
   item: ItemFila,
+  templatesBody: Map<string, string>,
 ): Promise<"enviado" | "erro"> {
   const b = item.broadcast;
   const d = item.devedor;
@@ -235,8 +260,12 @@ async function processarItem(
     nome_devedor: null, primeiro_nome: null, tratamento: null, instituicao: null,
     cidade: null, valor_atualizado: null, valor_original: null,
   };
-  const rotulo = b.template_body && b.template_body.trim()
-    ? renderCorpo(b.template_body, b.variaveis, devedorParaRender)
+  // Corpo do template: preferimos o guardado na campanha; se não houver
+  // (campanha antiga), usamos o que buscamos no Zernio; por último, o rótulo.
+  const corpoTemplate =
+    (b.template_body && b.template_body.trim()) ? b.template_body : (templatesBody.get(b.template_name) ?? "");
+  const rotulo = corpoTemplate
+    ? renderCorpo(corpoTemplate, b.variaveis, devedorParaRender)
     : `📢 Template "${b.template_name}" enviado`;
   const additional_kwargs: Record<string, unknown> = {
     broadcast_id: item.broadcast_id,
@@ -358,6 +387,9 @@ Deno.serve(async (req: Request) => {
       "devedor:fran_devedores(nome_devedor,primeiro_nome,tratamento,instituicao,cidade,valor_atualizado,valor_original)",
     ].join(",");
 
+    // Textos dos templates (para exibir o conteúdo real na thread).
+    const templatesBody = await buscarTemplatesBody(apiKey, accountId);
+
     let enviados = 0, erros = 0;
     const afetados = new Set<number>();
 
@@ -385,7 +417,7 @@ Deno.serve(async (req: Request) => {
           variaveis: bc.variaveis,
           status: bc.status,
         };
-        const r = await processarItem(env, apiKey, accountId, item);
+        const r = await processarItem(env, apiKey, accountId, item, templatesBody);
         if (r === "enviado") { enviados++; globalRestante--; } else erros++;
         afetados.add(bc.id);
       }
