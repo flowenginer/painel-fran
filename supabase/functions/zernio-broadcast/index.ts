@@ -325,57 +325,78 @@ Deno.serve(async (req: Request) => {
     const accountId = cfg["zernio_account_id"] || Deno.env.get("ZERNIO_ACCOUNT_ID") || "";
     if (!apiKey || !accountId) return jsonErr({ error: "Config Zernio ausente (zernio_api_key/zernio_account_id)" }, 500);
 
-    const porHora = Math.max(1, Number(cfg["zernio_broadcast_por_hora"] || "60") || 60);
+    // Teto de segurança global (por dia) — protege o número oficial mesmo se
+    // alguém configurar um ritmo altíssimo em várias campanhas ao mesmo tempo.
     const limiteDiario = Math.max(1, Number(cfg["zernio_broadcast_limite_diario"] || "1000") || 1000);
-    const TETO_INVOCACAO = 20;
+    const TETO_POR_BROADCAST = 20; // máximo por campanha por invocação
 
-    // --- Quotas: quanto já saiu na última hora / último dia ---
     const agora = Date.now();
     const desdeHoraIso = new Date(agora - 60 * 60 * 1000).toISOString();
     const desdeDiaIso = new Date(agora - 24 * 60 * 60 * 1000).toISOString();
-    const enviadosHora = await contar(env, `/fran_zernio_broadcast_itens?status=eq.enviado&data_processado=gte.${encodeURIComponent(desdeHoraIso)}&select=id`);
-    const enviadosDia = await contar(env, `/fran_zernio_broadcast_itens?status=eq.enviado&data_processado=gte.${encodeURIComponent(desdeDiaIso)}&select=id`);
 
-    const restanteHora = porHora - enviadosHora;
-    const restanteDia = limiteDiario - enviadosDia;
-    const quota = Math.min(TETO_INVOCACAO, restanteHora, restanteDia);
-    if (quota <= 0) {
-      return jsonOk({ ok: true, processados: 0, mensagem: "Limite atingido nesta janela", enviadosHora, enviadosDia, porHora, limiteDiario });
+    const enviadosDia = await contar(env, `/fran_zernio_broadcast_itens?status=eq.enviado&data_processado=gte.${encodeURIComponent(desdeDiaIso)}&select=id`);
+    let globalRestante = limiteDiario - enviadosDia;
+    if (globalRestante <= 0) {
+      return jsonOk({ ok: true, processados: 0, mensagem: "Teto diário global atingido", enviadosDia, limiteDiario });
     }
 
-    // --- Puxa o lote de itens na_fila (com broadcast + devedor embutidos) ---
-    const select = [
+    // --- Campanhas em andamento (cada uma com seu próprio ritmo) ---
+    const campoBroadcast = "id,por_hora,status,template_name,template_language,template_body,variaveis";
+    const bcsResp = await rest(env, "GET", `/fran_zernio_broadcasts?status=in.(ativo,rascunho)&select=${encodeURIComponent(campoBroadcast)}&order=id.asc`);
+    if (!bcsResp.ok) {
+      const t = await bcsResp.text().catch(() => "");
+      return jsonErr({ error: `Falha ao ler campanhas: ${t}` }, 500);
+    }
+    const campanhas = (await bcsResp.json().catch(() => [])) as Array<{
+      id: number; por_hora: number | null; status: string;
+      template_name: string; template_language: string; template_body: string | null;
+      variaveis: Record<string, string> | null;
+    }>;
+
+    const selectItem = [
       "id", "broadcast_id", "devedor_id", "telefone", "tentativas",
-      "broadcast:fran_zernio_broadcasts(template_name,template_language,template_body,variaveis,status)",
       "devedor:fran_devedores(nome_devedor,primeiro_nome,tratamento,instituicao,cidade,valor_atualizado,valor_original)",
     ].join(",");
-    const itensResp = await rest(env, "GET", `/fran_zernio_broadcast_itens?status=eq.na_fila&order=created_at.asc&limit=${quota}&select=${encodeURIComponent(select)}`);
-    if (!itensResp.ok) {
-      const t = await itensResp.text().catch(() => "");
-      return jsonErr({ error: `Falha ao ler fila: ${t}` }, 500);
-    }
-    const itens = (await itensResp.json().catch(() => [])) as ItemFila[];
-
-    // Ignora itens de broadcasts pausados/cancelados (deixa na fila, sem enviar).
-    const enviaveis = itens.filter((it) => {
-      const s = it.broadcast?.status ?? "";
-      return s !== "pausado" && s !== "cancelado";
-    });
 
     let enviados = 0, erros = 0;
     const afetados = new Set<number>();
-    for (const item of enviaveis) {
-      const r = await processarItem(env, apiKey, accountId, item);
-      if (r === "enviado") enviados++; else erros++;
-      afetados.add(item.broadcast_id);
+
+    for (const bc of campanhas) {
+      if (globalRestante <= 0) break;
+
+      // Ritmo desta campanha: quanto ela ainda pode enviar nesta hora.
+      const porHora = Math.max(1, Number(bc.por_hora ?? 60) || 60);
+      const enviadosHoraBc = await contar(env, `/fran_zernio_broadcast_itens?broadcast_id=eq.${bc.id}&status=eq.enviado&data_processado=gte.${encodeURIComponent(desdeHoraIso)}&select=id`);
+      const quotaBc = Math.min(porHora - enviadosHoraBc, TETO_POR_BROADCAST, globalRestante);
+      if (quotaBc <= 0) continue;
+
+      const itensResp = await rest(env, "GET", `/fran_zernio_broadcast_itens?broadcast_id=eq.${bc.id}&status=eq.na_fila&order=created_at.asc&limit=${quotaBc}&select=${encodeURIComponent(selectItem)}`);
+      if (!itensResp.ok) continue;
+      const itens = (await itensResp.json().catch(() => [])) as ItemFila[];
+      if (itens.length === 0) continue;
+
+      for (const item of itens) {
+        if (globalRestante <= 0) break;
+        // Injeta os dados da campanha (evita um join por item).
+        item.broadcast = {
+          template_name: bc.template_name,
+          template_language: bc.template_language,
+          template_body: bc.template_body,
+          variaveis: bc.variaveis,
+          status: bc.status,
+        };
+        const r = await processarItem(env, apiKey, accountId, item);
+        if (r === "enviado") { enviados++; globalRestante--; } else erros++;
+        afetados.add(bc.id);
+      }
     }
 
     for (const bid of afetados) {
       try { await reconciliarBroadcast(env, bid); } catch (e) { console.error("[zernio-broadcast] reconciliar:", e); }
     }
 
-    console.log(`[zernio-broadcast] lote: enviados=${enviados} erros=${erros} (quota=${quota}, hora=${enviadosHora}/${porHora}, dia=${enviadosDia}/${limiteDiario})`);
-    return jsonOk({ ok: true, processados: enviaveis.length, enviados, erros, quota, enviadosHora, enviadosDia, porHora, limiteDiario });
+    console.log(`[zernio-broadcast] lote: enviados=${enviados} erros=${erros} campanhas=${campanhas.length} (dia=${enviadosDia}/${limiteDiario})`);
+    return jsonOk({ ok: true, enviados, erros, campanhas: campanhas.length, enviadosDia, limiteDiario });
 
   } catch (err) {
     console.error("[zernio-broadcast] Excecao:", err);

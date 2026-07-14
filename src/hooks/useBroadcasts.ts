@@ -30,6 +30,15 @@ export function useBroadcasts() {
   return useQuery({
     queryKey: ["broadcasts"],
     queryFn: listarBroadcasts,
-    staleTime: 15_000,
+    staleTime: 5_000,
+    // Enquanto houver campanha ativa (enviando), atualiza sozinho para a
+    // barra de progresso andar ao vivo. Parado quando não há nada enviando.
+    refetchInterval: (query) => {
+      const dados = query.state.data as BroadcastResumo[] | undefined;
+      const enviando = (dados ?? []).some(
+        (b) => b.status === "ativo" && b.total_enviados + b.total_erros < b.total_alvos,
+      );
+      return enviando ? 5_000 : false;
+    },
   });
 }
