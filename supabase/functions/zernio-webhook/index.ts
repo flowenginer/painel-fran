@@ -72,6 +72,12 @@ async function lerWebhookSecret(supabaseUrl: string, serviceKey: string): Promis
   return mapa["zernio_webhook_secret"] || Deno.env.get("ZERNIO_WEBHOOK_SECRET") || "";
 }
 
+// Fluxo de IA no n8n para o canal oficial. Configurável por env; default = URL
+// de produção do webhook "ia-api-oficial" no n8n da Chelsan.
+const N8N_IA_OFICIAL_URL =
+  Deno.env.get("N8N_IA_OFICIAL_URL") ||
+  "https://nwh.chelsan.com.br/webhook/ia-api-oficial";
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return jsonErr({ error: "Metodo nao permitido" }, 405);
@@ -161,6 +167,27 @@ Deno.serve(async (req: Request) => {
       const t = await insResp.text().catch(() => "");
       console.error("[zernio-webhook] Erro ao gravar fran_memory:", t);
       return jsonOk({ ok: false, aviso: "Mensagem recebida mas nao gravada", detalhe: t });
+    }
+
+    // Repassa a mensagem recebida para o fluxo de IA no n8n (canal oficial).
+    // Best-effort: se o n8n estiver fora, NÃO falha o webhook (a mensagem já
+    // foi gravada e aparece no painel). O gate de Block IA é feito no n8n.
+    if (N8N_IA_OFICIAL_URL) {
+      try {
+        await fetch(N8N_IA_OFICIAL_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            telefone,
+            message: content,
+            conversationId,
+            accountId,
+            senderName,
+          }),
+        });
+      } catch (e) {
+        console.error("[zernio-webhook] Falha ao repassar para n8n:", e);
+      }
     }
 
     console.log(`[zernio-webhook] OK | telefone=${telefone} | conv=${conversationId}`);
