@@ -82,6 +82,47 @@ async function invocarTemplates(body: Record<string, unknown>) {
   return data;
 }
 
+// Resultado do processador de broadcasts (Edge Function zernio-broadcast).
+export interface ProcessarBroadcastResult {
+  ok: boolean;
+  ativo?: boolean;
+  mensagem?: string;
+  processados?: number;
+  enviados?: number;
+  erros?: number;
+  enviadosHora?: number;
+  enviadosDia?: number;
+  porHora?: number;
+  limiteDiario?: number;
+}
+
+// Chama a Edge Function zernio-broadcast (processa a fila) com o JWT do admin.
+async function invocarBroadcast(): Promise<ProcessarBroadcastResult> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error("Sessão expirou. Faça login novamente.");
+
+  const { data, error } = await supabase.functions.invoke("zernio-broadcast", {
+    body: { trigger: "manual" },
+    headers: { Authorization: `Bearer ${session.access_token}` },
+  });
+
+  if (error) {
+    const ctx = (error as { context?: Response }).context;
+    if (ctx && typeof ctx.json === "function") {
+      try {
+        const b = await ctx.json();
+        if (b?.error) throw new Error(b.error);
+      } catch (e) {
+        if (e instanceof Error && e.message !== "ctx.json is not a function") throw e;
+      }
+    }
+    throw new Error(error instanceof Error ? error.message : "Falha ao chamar zernio-broadcast");
+  }
+  return data as ProcessarBroadcastResult;
+}
+
 export const zernio = {
   templates: {
     list: (): Promise<ZernioTemplate[]> =>
@@ -92,5 +133,9 @@ export const zernio = {
 
     deletar: (name: string): Promise<void> =>
       invocarTemplates({ acao: "deletar", name }).then(() => undefined),
+  },
+  broadcast: {
+    // Processa a fila agora (respeita zernio_broadcast_ativo + limites no servidor).
+    processar: (): Promise<ProcessarBroadcastResult> => invocarBroadcast(),
   },
 };
