@@ -4,7 +4,7 @@
 // O ENVIO respeitando limites é feito pela Edge Function `zernio-broadcast`
 // (fase 2, agendada no cron como o processar-fila).
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Info,
@@ -46,6 +46,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useDevedores, fetchDevedoresIds } from "@/hooks/useDevedores";
 import { useDevedoresFilters } from "@/hooks/useDevedoresFilters";
 import { useSelecaoDevedores } from "@/hooks/useSelecaoDevedores";
+import { useBroadcasts } from "@/hooks/useBroadcasts";
 import { FiltrosBar } from "@/components/dashboard/FiltrosBar";
 import { zernio } from "@/lib/zernio";
 import {
@@ -58,8 +59,11 @@ import { formatBRL, formatTelefone } from "@/lib/formatters";
 
 export function Broadcasts() {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const { isAdmin, temPermissao } = useAuth();
   const podeGerenciar = isAdmin || temPermissao("acao", "gerenciar_broadcasts");
+
+  const { data: broadcasts = [] } = useBroadcasts();
 
   const [nome, setNome] = useState("");
   const [templateName, setTemplateName] = useState("");
@@ -151,6 +155,7 @@ export function Broadcasts() {
       setNome("");
       setVariaveis({});
       limpar();
+      qc.invalidateQueries({ queryKey: ["broadcasts"] });
     } catch (e) {
       toast({
         variant: "destructive",
@@ -186,6 +191,68 @@ export function Broadcasts() {
           <strong>aprovado pela Meta</strong>.
         </p>
       </div>
+
+      {/* Histórico de campanhas */}
+      {broadcasts.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Histórico de broadcasts</CardTitle>
+            <CardDescription className="text-xs">
+              Campanhas criadas e o andamento do envio.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Campanha</TableHead>
+                  <TableHead>Template</TableHead>
+                  <TableHead className="text-right">Alvos</TableHead>
+                  <TableHead className="text-right">Enviados</TableHead>
+                  <TableHead className="text-right">Na fila</TableHead>
+                  <TableHead className="text-right">Erros</TableHead>
+                  <TableHead>Criado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {broadcasts.map((b) => {
+                  const naFila = Math.max(
+                    0,
+                    b.total_alvos - b.total_enviados - b.total_erros,
+                  );
+                  return (
+                    <TableRow key={b.id}>
+                      <TableCell className="font-medium">{b.nome}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">
+                        {b.template_name}
+                      </TableCell>
+                      <TableCell className="text-right">{b.total_alvos}</TableCell>
+                      <TableCell className="text-right text-green-600 dark:text-green-400">
+                        {b.total_enviados}
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {naFila}
+                      </TableCell>
+                      <TableCell className="text-right text-destructive">
+                        {b.total_erros}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {new Intl.DateTimeFormat("pt-BR", {
+                          timeZone: "America/Sao_Paulo",
+                          day: "2-digit",
+                          month: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        }).format(new Date(b.created_at))}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Sem templates aprovados */}
       {!loadingTemplates && aprovados.length === 0 ? (
