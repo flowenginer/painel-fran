@@ -174,6 +174,7 @@ export function Broadcasts() {
         nome,
         template_name: template.name,
         template_language: template.language,
+        template_body: bodyText,
         variaveis,
         devedor_ids: Array.from(selecionados),
       });

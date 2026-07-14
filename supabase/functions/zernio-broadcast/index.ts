@@ -146,8 +146,19 @@ interface ItemFila {
   devedor_id: number;
   telefone: string;
   tentativas: number;
-  broadcast: { template_name: string; template_language: string; variaveis: Record<string, string> | null; status: string } | null;
+  broadcast: { template_name: string; template_language: string; template_body: string | null; variaveis: Record<string, string> | null; status: string } | null;
   devedor: Devedor | null;
+}
+
+// Renderiza o corpo do template preenchendo {{n}} com o valor do campo do
+// devedor — o texto real que o lead recebeu, para exibir em Conversas.
+function renderCorpo(corpo: string, variaveis: Record<string, string> | null | undefined, d: Devedor): string {
+  const mapa = variaveis ?? {};
+  return corpo.replace(/\{\{\s*(\d+)\s*\}\}/g, (_todo, n: string) => {
+    const campoId = mapa[n];
+    const valor = campoId ? valorCampo(campoId, d) : "";
+    return valor || `{{${n}}}`;
+  });
 }
 
 const MAX_TENTATIVAS = 3;
@@ -217,8 +228,16 @@ async function processarItem(
     } catch (e) { console.error("[zernio-broadcast] upsert conversa:", e); }
   }
 
-  // Grava na thread (Conversas) — type "ai".
-  const rotulo = `📢 Template "${b.template_name}" enviado`;
+  // Grava na thread (Conversas) — type "ai". Mostra o TEXTO REAL enviado
+  // (corpo do template com as variáveis preenchidas); se não tivermos o corpo
+  // guardado (campanhas antigas), cai no rótulo.
+  const devedorParaRender = d ?? {
+    nome_devedor: null, primeiro_nome: null, tratamento: null, instituicao: null,
+    cidade: null, valor_atualizado: null, valor_original: null,
+  };
+  const rotulo = b.template_body && b.template_body.trim()
+    ? renderCorpo(b.template_body, b.variaveis, devedorParaRender)
+    : `📢 Template "${b.template_name}" enviado`;
   const additional_kwargs: Record<string, unknown> = {
     broadcast_id: item.broadcast_id,
     template_name: b.template_name,
@@ -327,7 +346,7 @@ Deno.serve(async (req: Request) => {
     // --- Puxa o lote de itens na_fila (com broadcast + devedor embutidos) ---
     const select = [
       "id", "broadcast_id", "devedor_id", "telefone", "tentativas",
-      "broadcast:fran_zernio_broadcasts(template_name,template_language,variaveis,status)",
+      "broadcast:fran_zernio_broadcasts(template_name,template_language,template_body,variaveis,status)",
       "devedor:fran_devedores(nome_devedor,primeiro_nome,tratamento,instituicao,cidade,valor_atualizado,valor_original)",
     ].join(",");
     const itensResp = await rest(env, "GET", `/fran_zernio_broadcast_itens?status=eq.na_fila&order=created_at.asc&limit=${quota}&select=${encodeURIComponent(select)}`);
