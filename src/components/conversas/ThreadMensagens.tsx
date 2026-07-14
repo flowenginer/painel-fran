@@ -47,6 +47,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useOperadores } from "@/hooks/useOperadores";
 import { useCanais } from "@/hooks/useCanais";
 import { useConfig } from "@/hooks/useConfig";
+import { cn } from "@/lib/utils";
 import { nomeOperador } from "@/lib/conversas-transfer";
 import { formatTelefone } from "@/lib/formatters";
 import { formatDuracaoRestante } from "@/lib/dates";
