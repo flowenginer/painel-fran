@@ -3,6 +3,8 @@ import {
   AlertTriangle,
   ArrowLeftRight,
   Ban,
+  Check,
+  ChevronDown,
   Clock,
   Inbox,
   Loader2,
@@ -26,6 +28,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   filtrarVisiveis,
   useMensagensConversa,
 } from "@/hooks/useMensagensConversa";
@@ -37,6 +46,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useOperadores } from "@/hooks/useOperadores";
 import { useCanais } from "@/hooks/useCanais";
+import { useConfig } from "@/hooks/useConfig";
 import { nomeOperador } from "@/lib/conversas-transfer";
 import { formatTelefone } from "@/lib/formatters";
 import { formatDuracaoRestante } from "@/lib/dates";
@@ -109,23 +119,39 @@ export function ThreadMensagens({ conversa }: Props) {
   const [transferindo, setTransferindo] = useState(false);
   const [midiaAberta, setMidiaAberta] = useState<MidiaAberta | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  // Canal de envio escolhido manualmente no menu (sobrescreve o "grudado").
+  const [canalManual, setCanalManual] = useState<string | null>(null);
   const { mutateAsync: toggleBlock, isPending: alterandoBlock } =
     useToggleBlockIA();
   const { toast } = useToast();
   const { isAdmin, temPermissao } = useAuth();
   const { data: operadores } = useOperadores();
   const { data: canais } = useCanais();
+  const { data: config } = useConfig();
 
-  // Canal de saída da conversa = instância da última mensagem com canal.
+  // Canal "grudado" da conversa = instância da última mensagem com canal.
   const canalInstancia = conversa?.ultima_mensagem?.canal ?? null;
-  const canalNome = canalInstancia
-    ? canais?.find((c) => c.instancia === canalInstancia)?.nome ?? canalInstancia
+  // Reseta a escolha manual ao trocar de conversa.
+  useEffect(() => {
+    setCanalManual(null);
+  }, [telefone]);
+  // Canal de envio efetivo = escolha manual (menu) ou o grudado.
+  const canalSelecionado = canalManual ?? canalInstancia;
+
+  // Valor do canal oficial (Zernio) = "zernio:<accountId>" da config.
+  const zernioAccountId = config?.zernio_account_id ?? "";
+  const canalOficialValor = zernioAccountId ? `zernio:${zernioAccountId}` : null;
+  // Números UAZAPI ativos, para o menu de canal de envio.
+  const canaisUazapi = (canais ?? []).filter((c) => c.ativo);
+
+  const canalNome = canalSelecionado
+    ? canais?.find((c) => c.instancia === canalSelecionado)?.nome ?? canalSelecionado
     : null;
   // Canal oficial = Meta Cloud API (Zernio); os demais são UAZAPI (não-oficial).
-  const ehCanalOficial = canalInstancia?.startsWith("zernio:") ?? false;
+  const ehCanalOficial = canalSelecionado?.startsWith("zernio:") ?? false;
   // Só mostra o nome amigável do número quando resolvido (nunca o ID cru).
   const canalNomeAmigavel =
-    canalNome && canalNome !== canalInstancia ? canalNome : null;
+    canalNome && canalNome !== canalSelecionado ? canalNome : null;
 
   // Janela de 24h (só canal oficial): no WhatsApp Business só se pode enviar
   // texto livre até 24h após a última mensagem do lead (type "human"). Fora
@@ -240,7 +266,7 @@ export function ThreadMensagens({ conversa }: Props) {
                 {responsavelNome ?? "Sem responsável"}
               </Badge>
             )}
-            {canalInstancia &&
+            {canalSelecionado &&
               (ehCanalOficial ? (
                 <Badge
                   variant="outline"
@@ -298,6 +324,57 @@ export function ThreadMensagens({ conversa }: Props) {
 
         {/* Ações — fixas à direita, só ícone em telas estreitas */}
         <div className="flex shrink-0 items-center gap-2">
+          {/* Canal de envio — escolhe por qual número as mensagens saem */}
+          {(canalOficialValor || canaisUazapi.length > 0) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" title="Canal de envio">
+                  <span
+                    className={cn(
+                      "h-2 w-2 rounded-full",
+                      ehCanalOficial
+                        ? "bg-green-500"
+                        : canalSelecionado
+                          ? "bg-rose-500"
+                          : "bg-muted-foreground"
+                    )}
+                  />
+                  <span className="mx-1.5 hidden max-w-[120px] truncate sm:inline">
+                    {ehCanalOficial ? "Oficial" : canalNomeAmigavel ?? "Canal"}
+                  </span>
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Canal de envio</DropdownMenuLabel>
+                {canalOficialValor && (
+                  <DropdownMenuItem
+                    className="gap-2"
+                    onClick={() => setCanalManual(canalOficialValor)}
+                  >
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" />
+                    Oficial (WhatsApp Business)
+                    {canalSelecionado === canalOficialValor && (
+                      <Check className="ml-auto h-4 w-4" />
+                    )}
+                  </DropdownMenuItem>
+                )}
+                {canaisUazapi.map((c) => (
+                  <DropdownMenuItem
+                    key={c.id}
+                    className="gap-2"
+                    onClick={() => setCanalManual(c.instancia)}
+                  >
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-rose-500" />
+                    <span className="truncate">{c.nome}</span>
+                    {canalSelecionado === c.instancia && (
+                      <Check className="ml-auto h-4 w-4" />
+                    )}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           {podeTransferir && conversa.devedor && (
             <Button
               variant="outline"
@@ -418,10 +495,10 @@ export function ThreadMensagens({ conversa }: Props) {
         </div>
       )}
 
-      {/* Composer (roteia UAZAPI/Zernio pelo canal da conversa) */}
+      {/* Composer (roteia UAZAPI/Zernio pelo canal selecionado) */}
       <Composer
         telefoneNormalizado={telefone}
-        canal={canalInstancia}
+        canal={canalSelecionado}
         disabled={!telefone}
         janelaFechada={janelaFechada}
       />

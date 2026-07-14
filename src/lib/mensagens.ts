@@ -93,6 +93,9 @@ async function enviarViaUazapi(
         texto: input.texto ?? "",
         tipo: input.tipo ?? "texto",
         media_url: input.media_url ?? null,
+        // Canal escolhido no chat (instância UAZAPI). Vazio = usa o canal
+        // "grudado" da conversa (comportamento padrão).
+        canal: input.canal ?? null,
       },
       headers: { Authorization: `Bearer ${token}` },
     }
