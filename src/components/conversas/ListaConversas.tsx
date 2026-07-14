@@ -1,7 +1,16 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Ban, Search, UserRound } from "lucide-react";
+import { Ban, Check, Loader2, Search, Trash2, UserRound } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -10,6 +19,9 @@ import { nomeOperador, type OperadorLite } from "@/lib/conversas-transfer";
 import { formatTelefone } from "@/lib/formatters";
 import { STATUS_BLOCK_IA } from "@/hooks/useDevedorMutations";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
+import { useAuth } from "@/hooks/useAuth";
+import { useExcluirConversas } from "@/hooks/useExcluirConversas";
+import { useToast } from "@/hooks/use-toast";
 import type { ConversaItem } from "@/hooks/useConversas";
 
 interface Props {
@@ -94,6 +106,50 @@ export function ListaConversas({
   const [semResposta, setSemResposta] = useState(false);
   const [soNaoLidas, setSoNaoLidas] = useState(false);
 
+  // Exclusão de conversas (admin-only).
+  const { isAdmin } = useAuth();
+  const { toast } = useToast();
+  const { mutateAsync: excluirConversas, isPending: excluindo } =
+    useExcluirConversas();
+  const [modoSelecao, setModoSelecao] = useState(false);
+  const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
+  const [confirmando, setConfirmando] = useState(false);
+
+  function toggleSelecionada(tel: string) {
+    setSelecionadas((prev) => {
+      const next = new Set(prev);
+      if (next.has(tel)) next.delete(tel);
+      else next.add(tel);
+      return next;
+    });
+  }
+
+  function sairDaSelecao() {
+    setModoSelecao(false);
+    setSelecionadas(new Set());
+  }
+
+  async function confirmarExclusao() {
+    const alvos = Array.from(selecionadas);
+    try {
+      const apagadas = await excluirConversas(alvos);
+      toast({
+        variant: "success",
+        title: `${alvos.length} conversa(s) excluída(s)`,
+        description: `${apagadas} mensagem(ns) apagada(s). Cadastros mantidos.`,
+      });
+      sairDaSelecao();
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao excluir",
+        description: e instanceof Error ? e.message : "Falha desconhecida",
+      });
+    } finally {
+      setConfirmando(false);
+    }
+  }
+
   const filtradas = useMemo(() => {
     const q = busca.trim().toLowerCase();
     const qDigitos = q.replace(/\D/g, "");
@@ -165,10 +221,38 @@ export function ListaConversas({
         </div>
 
         {!isLoading && (
-          <p className="mt-2 text-[11px] text-muted-foreground">
-            {filtradas.length} conversa{filtradas.length !== 1 ? "s" : ""}
-            {temFiltroAtivo && ` · de ${conversas.length} totais`}
-          </p>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <p className="text-[11px] text-muted-foreground">
+              {modoSelecao ? (
+                `${selecionadas.size} selecionada(s)`
+              ) : (
+                <>
+                  {filtradas.length} conversa{filtradas.length !== 1 ? "s" : ""}
+                  {temFiltroAtivo && ` · de ${conversas.length} totais`}
+                </>
+              )}
+            </p>
+            {isAdmin &&
+              (modoSelecao ? (
+                <button
+                  type="button"
+                  onClick={sairDaSelecao}
+                  className="text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  Cancelar
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setModoSelecao(true)}
+                  className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+                  title="Selecionar conversas para excluir"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Selecionar
+                </button>
+              ))}
+          </div>
         )}
       </div>
 
@@ -197,6 +281,7 @@ export function ListaConversas({
           {filtradas.map((c) => {
             const ativo = c.telefone_normalizado === selecionada;
             const nova = naoLida?.(c) ?? false;
+            const marcado = selecionadas.has(c.telefone_normalizado);
             const nomeExibido =
               c.devedor?.nome_devedor ??
               (c.telefone_normalizado
@@ -206,13 +291,30 @@ export function ListaConversas({
               <li key={c.telefone_normalizado}>
                 <button
                   type="button"
-                  onClick={() => onSelecionar(c.telefone_normalizado)}
+                  onClick={() =>
+                    modoSelecao
+                      ? toggleSelecionada(c.telefone_normalizado)
+                      : onSelecionar(c.telefone_normalizado)
+                  }
                   className={cn(
                     "flex w-full items-start gap-3 px-3 py-2.5 text-left transition-colors hover:bg-accent",
-                    ativo && "bg-accent",
-                    nova && !ativo && "bg-green-500/10"
+                    !modoSelecao && ativo && "bg-accent",
+                    modoSelecao && marcado && "bg-primary/10",
+                    !modoSelecao && nova && !ativo && "bg-green-500/10"
                   )}
                 >
+                  {modoSelecao && (
+                    <span
+                      className={cn(
+                        "mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded border",
+                        marcado
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-muted-foreground/40"
+                      )}
+                    >
+                      {marcado && <Check className="h-3.5 w-3.5" />}
+                    </span>
+                  )}
                   <div
                     className="relative shrink-0"
                     title={
@@ -325,6 +427,64 @@ export function ListaConversas({
           })}
         </ul>
       </div>
+
+      {/* Barra de ação de exclusão */}
+      {modoSelecao && selecionadas.size > 0 && (
+        <div className="shrink-0 border-t bg-background p-2">
+          <Button
+            variant="destructive"
+            size="sm"
+            className="w-full"
+            onClick={() => setConfirmando(true)}
+            disabled={excluindo}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Excluir {selecionadas.size} conversa
+            {selecionadas.size !== 1 ? "s" : ""}
+          </Button>
+        </div>
+      )}
+
+      {/* Confirmação (destrutivo) */}
+      <Dialog
+        open={confirmando}
+        onOpenChange={(o) => !excluindo && setConfirmando(o)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Excluir {selecionadas.size} conversa
+              {selecionadas.size !== 1 ? "s" : ""}?
+            </DialogTitle>
+            <DialogDescription>
+              Isso apaga o histórico de mensagens dessas conversas e{" "}
+              <strong>não pode ser desfeito</strong>. O cadastro dos devedores
+              é mantido.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmando(false)}
+              disabled={excluindo}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmarExclusao}
+              disabled={excluindo}
+            >
+              {excluindo ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4" />
+              )}
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
