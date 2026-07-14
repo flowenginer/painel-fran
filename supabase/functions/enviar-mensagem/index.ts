@@ -178,16 +178,28 @@ Deno.serve(async (req: Request) => {
     // ordem). A instância vai no payload para o n8n rotear, e é gravada em
     // fran_memory.canal para manter o grude da conversa.
     let instancia: string | null = null;
-    try {
-      const rpc = await rest(env, "POST", "/rpc/fran_canal_conversa", {
-        p_tel: telefone,
-      });
-      if (rpc.ok) {
-        const v = (await rpc.json().catch(() => null)) as unknown;
-        if (typeof v === "string" && v.trim()) instancia = v.trim();
+    // Override explícito do canal escolhido no chat (menu "Canal de envio").
+    // Só vale para instância UAZAPI — canais "zernio:" são roteados pela função
+    // zernio-enviar e nunca chegam aqui.
+    const canalEscolhido =
+      typeof body.canal === "string" && body.canal.trim()
+        ? body.canal.trim()
+        : null;
+    if (canalEscolhido && !canalEscolhido.startsWith("zernio:")) {
+      instancia = canalEscolhido;
+    }
+    if (!instancia) {
+      try {
+        const rpc = await rest(env, "POST", "/rpc/fran_canal_conversa", {
+          p_tel: telefone,
+        });
+        if (rpc.ok) {
+          const v = (await rpc.json().catch(() => null)) as unknown;
+          if (typeof v === "string" && v.trim()) instancia = v.trim();
+        }
+      } catch {
+        /* segue para o canal padrão */
       }
-    } catch {
-      /* segue para o canal padrão */
     }
     if (!instancia) {
       const defResp = await rest(
