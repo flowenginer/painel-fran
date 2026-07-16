@@ -10,11 +10,29 @@ import {
   Info,
   Loader2,
   Megaphone,
+  MoreVertical,
+  Pause,
+  Play,
   Send,
   Users,
+  XCircle,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Card,
   CardContent,
@@ -51,9 +69,12 @@ import { FiltrosBar } from "@/components/dashboard/FiltrosBar";
 import { zernio } from "@/lib/zernio";
 import {
   CAMPOS_DEVEDOR,
+  cancelarBroadcast,
   criarBroadcast,
   extrairVariaveis,
+  pausarBroadcast,
   renderPreview,
+  retomarBroadcast,
 } from "@/lib/broadcasts";
 import { formatBRL, formatTelefone } from "@/lib/formatters";
 
@@ -72,6 +93,36 @@ export function Broadcasts() {
   const [carregandoTodos, setCarregandoTodos] = useState(false);
   // Ritmo de envio da campanha (mensagens/hora).
   const [ritmo, setRitmo] = useState("60");
+  // Ação de status em andamento (id do broadcast) + confirmação de cancelamento.
+  const [acaoId, setAcaoId] = useState<number | null>(null);
+  const [cancelando, setCancelando] = useState<{ id: number; nome: string } | null>(null);
+
+  async function mudarStatus(
+    id: number,
+    fn: (id: number) => Promise<void>,
+    titulo: string,
+  ) {
+    setAcaoId(id);
+    try {
+      await fn(id);
+      toast({ variant: "success", title: titulo });
+      qc.invalidateQueries({ queryKey: ["broadcasts"] });
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "Não foi possível atualizar",
+        description: e instanceof Error ? e.message : "Falha desconhecida",
+      });
+    } finally {
+      setAcaoId(null);
+    }
+  }
+
+  async function confirmarCancelamento() {
+    if (!cancelando) return;
+    await mudarStatus(cancelando.id, cancelarBroadcast, "Broadcast cancelado");
+    setCancelando(null);
+  }
 
   const { selecionados, toggle, togglePagina, selecionarTodos, limpar } =
     useSelecaoDevedores();
@@ -231,6 +282,7 @@ export function Broadcasts() {
                   <TableHead className="text-right">Erros</TableHead>
                   <TableHead className="min-w-[160px]">Progresso</TableHead>
                   <TableHead>Criado</TableHead>
+                  {podeGerenciar && <TableHead className="w-10" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -303,6 +355,56 @@ export function Broadcasts() {
                           minute: "2-digit",
                         }).format(new Date(b.created_at))}
                       </TableCell>
+                      {podeGerenciar && (
+                        <TableCell className="text-right">
+                          {["ativo", "pausado", "rascunho"].includes(b.status) && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  disabled={acaoId === b.id}
+                                >
+                                  {acaoId === b.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <MoreVertical className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {b.status === "pausado" ? (
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      mudarStatus(b.id, retomarBroadcast, "Broadcast retomado")
+                                    }
+                                  >
+                                    <Play className="mr-2 h-4 w-4" />
+                                    Retomar
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      mudarStatus(b.id, pausarBroadcast, "Broadcast pausado")
+                                    }
+                                  >
+                                    <Pause className="mr-2 h-4 w-4" />
+                                    Pausar
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => setCancelando({ id: b.id, nome: b.nome })}
+                                >
+                                  <XCircle className="mr-2 h-4 w-4" />
+                                  Cancelar
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}
@@ -608,6 +710,41 @@ export function Broadcasts() {
           </div>
         </div>
       )}
+
+      {/* Confirmação de cancelamento */}
+      <Dialog open={!!cancelando} onOpenChange={(v) => { if (!v) setCancelando(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancelar broadcast?</DialogTitle>
+            <DialogDescription>
+              A campanha <strong>{cancelando?.nome}</strong> vai parar de enviar e os
+              alvos que ainda estão na fila serão descartados. Isto não pode ser
+              desfeito (os já enviados permanecem).
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setCancelando(null)}
+              disabled={acaoId === cancelando?.id}
+            >
+              Voltar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmarCancelamento}
+              disabled={acaoId === cancelando?.id}
+            >
+              {acaoId === cancelando?.id ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <XCircle className="mr-2 h-4 w-4" />
+              )}
+              Cancelar broadcast
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

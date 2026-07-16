@@ -76,6 +76,40 @@ export function renderPreview(
   });
 }
 
+// Pausa uma campanha em andamento (o processador para de enviar, mas mantém a
+// fila — dá para retomar).
+export async function pausarBroadcast(id: number): Promise<void> {
+  const { error } = await supabase
+    .from("fran_zernio_broadcasts")
+    .update({ status: "pausado", updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// Retoma uma campanha pausada.
+export async function retomarBroadcast(id: number): Promise<void> {
+  const { error } = await supabase
+    .from("fran_zernio_broadcasts")
+    .update({ status: "ativo", updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// Cancela a campanha e limpa a fila (não volta a enviar).
+export async function cancelarBroadcast(id: number): Promise<void> {
+  const { error: errItens } = await supabase
+    .from("fran_zernio_broadcast_itens")
+    .update({ status: "cancelado", updated_at: new Date().toISOString() })
+    .eq("broadcast_id", id)
+    .eq("status", "na_fila");
+  if (errItens) throw errItens;
+  const { error } = await supabase
+    .from("fran_zernio_broadcasts")
+    .update({ status: "cancelado", updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export interface CriarBroadcastInput {
   nome: string;
   template_name: string;
