@@ -207,13 +207,26 @@ async function processarItem(
     cidade: null, valor_atualizado: null, valor_original: null,
   });
 
+  // Formato do Zernio para iniciar conversa com template:
+  //  - SEM variáveis: campos planos { templateName, templateLanguage } (funciona).
+  //  - COM variáveis: objeto { template: { name, language, components } } no
+  //    padrão Meta — as variáveis vão em components[].parameters. (O campo plano
+  //    `templateComponents` NÃO é lido pelo Zernio, por isso dava
+  //    "Template parameter count mismatch".)
   const zernioBody: Record<string, unknown> = {
     accountId,
     participantId: telefone,
-    templateName: b.template_name,
-    templateLanguage: b.template_language,
   };
-  if (componentes.length > 0) zernioBody.templateComponents = componentes;
+  if (componentes.length > 0) {
+    zernioBody.template = {
+      name: b.template_name,
+      language: b.template_language,
+      components: componentes,
+    };
+  } else {
+    zernioBody.templateName = b.template_name;
+    zernioBody.templateLanguage = b.template_language;
+  }
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 30_000);
