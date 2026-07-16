@@ -3,6 +3,7 @@
 // selecionar público (devedores filtrados) → preview → criar (enfileira).
 // O ENVIO respeitando limites é feito pela Edge Function `zernio-broadcast`
 // (fase 2, agendada no cron como o processar-fila).
+// Layout: aba "Novo broadcast" (criação + rodapé fixo) e aba "Histórico".
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
