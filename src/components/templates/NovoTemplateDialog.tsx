@@ -2,14 +2,18 @@
 // Dialog para criar um novo template WhatsApp Business via Zernio.
 // Suporta: header (texto), body com variáveis {{1}}, footer, botões de resposta rápida.
 
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Plus, Trash2, Info } from "lucide-react";
+import { Plus, Trash2, Info, Braces } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { zernio, type CreateTemplateInput, type TemplateComponent } from "@/lib/zernio";
+import { CAMPOS_DEVEDOR, extrairVariaveis } from "@/lib/broadcasts";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +21,18 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+
+// Valores de exemplo por campo do lead — a Meta EXIGE um exemplo para cada
+// variável {{n}} do corpo, senão a criação do template é recusada.
+const EXEMPLO_CAMPO: Record<string, string> = {
+  primeiro_nome: "Maria",
+  nome_devedor: "Maria Silva",
+  tratamento: "Sra.",
+  instituicao: "Colégio Exemplo",
+  cidade: "Goiânia",
+  valor_atualizado: "1.500,00",
+  valor_original: "1.200,00",
+};
 
 interface Props {
   open: boolean;
@@ -41,6 +57,30 @@ export function NovoTemplateDialog({ open, onOpenChange, onSucesso }: Props) {
   const [footerTexto, setFooterTexto] = useState("");
   const [botoes, setBotoes] = useState<string[]>([]);
   const [novoBotao, setNovoBotao] = useState("");
+  // Mapa da variável do corpo → campo do lead ({"1":"primeiro_nome"}).
+  const [mapaCampos, setMapaCampos] = useState<Record<string, string>>({});
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  // Variáveis {{n}} realmente presentes no corpo (fonte da verdade).
+  const varsUsadas = useMemo(() => extrairVariaveis(bodyTexto), [bodyTexto]);
+
+  // Insere {{n}} na posição do cursor e já mapeia para o campo do lead.
+  function inserirCampo(campoId: string) {
+    const nums = extrairVariaveis(bodyTexto).map(Number);
+    const n = (nums.length ? Math.max(...nums) : 0) + 1;
+    const token = `{{${n}}}`;
+    const el = bodyRef.current;
+    const start = el?.selectionStart ?? bodyTexto.length;
+    const end = el?.selectionEnd ?? bodyTexto.length;
+    const novo = bodyTexto.slice(0, start) + token + bodyTexto.slice(end);
+    setBodyTexto(novo);
+    setMapaCampos((prev) => ({ ...prev, [String(n)]: campoId }));
+    requestAnimationFrame(() => {
+      const pos = start + token.length;
+      el?.focus();
+      el?.setSelectionRange(pos, pos);
+    });
+  }
 
   const { mutate: criar, isPending } = useMutation({
     mutationFn: (input: CreateTemplateInput) => zernio.templates.criar(input),
@@ -69,6 +109,7 @@ export function NovoTemplateDialog({ open, onOpenChange, onSucesso }: Props) {
     setFooterTexto("");
     setBotoes([]);
     setNovoBotao("");
+    setMapaCampos({});
   }
 
   function adicionarBotao() {
@@ -100,6 +141,27 @@ export function NovoTemplateDialog({ open, onOpenChange, onSucesso }: Props) {
       toast({ variant: "destructive", title: "O corpo (body) é obrigatório" });
       return;
     }
+    // Toda variável {{n}} precisa estar mapeada a um campo do lead (a Meta
+    // exige um exemplo por variável; usamos o campo para gerar o exemplo).
+    const naoMapeada = varsUsadas.find((v) => !mapaCampos[v]);
+    if (naoMapeada) {
+      toast({
+        variant: "destructive",
+        title: `Falta escolher o campo da variável {{${naoMapeada}}}`,
+        description: "Cada variável do corpo precisa apontar para um campo do lead.",
+      });
+      return;
+    }
+    // A Meta exige variáveis sequenciais: {{1}}, {{2}}, {{3}}... sem pular número.
+    const esperado = varsUsadas.map((_, i) => String(i + 1)).join(",");
+    if (varsUsadas.join(",") !== esperado) {
+      toast({
+        variant: "destructive",
+        title: "Variáveis fora de sequência",
+        description: "Use {{1}}, {{2}}, {{3}}… em ordem, sem pular número. Reinsira os campos pelo botão.",
+      });
+      return;
+    }
 
     // Montar components
     const components: TemplateComponent[] = [];
@@ -108,7 +170,14 @@ export function NovoTemplateDialog({ open, onOpenChange, onSucesso }: Props) {
       components.push({ type: "HEADER", format: "TEXT", text: headerTexto.trim() });
     }
 
-    components.push({ type: "BODY", text: bodyTexto.trim() });
+    const bodyComp: TemplateComponent = { type: "BODY", text: bodyTexto.trim() };
+    if (varsUsadas.length > 0) {
+      // example.body_text = [[ex1, ex2, ...]] na ordem 1,2,3...
+      bodyComp.example = {
+        body_text: [varsUsadas.map((v) => EXEMPLO_CAMPO[mapaCampos[v]] ?? "exemplo")],
+      };
+    }
+    components.push(bodyComp);
 
     if (footerTexto.trim()) {
       components.push({ type: "FOOTER", text: footerTexto.trim() });
@@ -136,10 +205,12 @@ export function NovoTemplateDialog({ open, onOpenChange, onSucesso }: Props) {
           <div className="flex gap-2 rounded bg-muted/50 p-3 text-xs text-muted-foreground">
             <Info className="mt-0.5 h-3 w-3 shrink-0" />
             <p>
-              Templates precisam ser aprovados pela Meta antes do uso. Use{" "}
-              <code className="font-mono">{"{{1}}"}</code>,{" "}
-              <code className="font-mono">{"{{2}}"}</code> para variáveis no corpo.
-              O processo leva de alguns minutos a 24h.
+              Templates precisam ser aprovados pela Meta antes do uso. Para
+              personalizar (nome do lead, instituição…), use{" "}
+              <strong>Inserir campo do lead</strong> no corpo — não digite{" "}
+              <code className="font-mono">[Nome]</code>; a Meta só aceita variáveis
+              no formato <code className="font-mono">{"{{1}}"}</code> com exemplos
+              (o sistema já cuida disso). O processo leva de alguns minutos a 24h.
             </p>
           </div>
 
@@ -210,22 +281,72 @@ export function NovoTemplateDialog({ open, onOpenChange, onSucesso }: Props) {
 
           {/* Body */}
           <div className="space-y-1.5">
-            <Label htmlFor="tpl-body">
-              Corpo <span className="text-destructive">*</span>
-            </Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="tpl-body">
+                Corpo <span className="text-destructive">*</span>
+              </Label>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
+                    <Braces className="h-3.5 w-3.5" />
+                    Inserir campo do lead
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {CAMPOS_DEVEDOR.map((c) => (
+                    <DropdownMenuItem key={c.id} onClick={() => inserirCampo(c.id)}>
+                      {c.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
             <Textarea
               id="tpl-body"
-              placeholder={"Olá, {{1}}! Identificamos uma pendência de R$ {{2}} em seu nome. Podemos ajudá-lo a regularizar sua situação. Responda SIM para saber mais."}
+              ref={bodyRef}
+              placeholder={"Olá, {{1}}! Passei a integrar a equipe da {{2}} e revisei o seu atendimento..."}
               value={bodyTexto}
               onChange={(e) => setBodyTexto(e.target.value)}
-              rows={5}
+              rows={6}
               maxLength={1024}
             />
             <p className="text-xs text-muted-foreground">
-              Use <code className="font-mono">{"{{1}}"}</code>,{" "}
-              <code className="font-mono">{"{{2}}"}</code> etc. para variáveis dinâmicas.
-              Máximo 1024 caracteres.
+              Clique em <strong>Inserir campo do lead</strong> para colocar um campo
+              personalizado (Nome, Instituição…) — ele vira <code className="font-mono">{"{{n}}"}</code>{" "}
+              e é preenchido na hora do envio. Máximo 1024 caracteres.
             </p>
+
+            {/* Mapeamento das variáveis → campo do lead */}
+            {varsUsadas.length > 0 && (
+              <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+                <p className="text-xs font-medium">Campos usados no corpo</p>
+                {varsUsadas.map((v) => (
+                  <div key={v} className="flex items-center gap-2">
+                    <span className="w-10 shrink-0 font-mono text-xs">{`{{${v}}}`}</span>
+                    <Select
+                      value={mapaCampos[v] ?? ""}
+                      onValueChange={(campo) =>
+                        setMapaCampos((prev) => ({ ...prev, [v]: campo }))
+                      }
+                    >
+                      <SelectTrigger className="h-8 flex-1">
+                        <SelectValue placeholder="Escolha o campo do lead" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CAMPOS_DEVEDOR.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <span className="hidden w-28 shrink-0 truncate text-[11px] text-muted-foreground sm:inline">
+                      ex: {mapaCampos[v] ? EXEMPLO_CAMPO[mapaCampos[v]] ?? "—" : "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Footer (opcional) */}
