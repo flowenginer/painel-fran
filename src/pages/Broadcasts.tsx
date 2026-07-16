@@ -59,6 +59,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useDevedores, fetchDevedoresIds } from "@/hooks/useDevedores";
@@ -249,170 +255,26 @@ export function Broadcasts() {
         </div>
       </div>
 
-      {/* Como funciona o envio */}
-      <div className="flex items-start gap-2 rounded-md border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-700 dark:text-blue-300">
-        <Info className="mt-0.5 h-4 w-4 shrink-0" />
-        <p>
-          Ao criar, o envio <strong>começa sozinho</strong> e goteja no{" "}
-          <strong>ritmo escolhido</strong> (para proteger o número oficial na
-          Meta). Acompanhe pela barra de progresso abaixo. Requer um template{" "}
-          <strong>aprovado pela Meta</strong>.
-        </p>
-      </div>
+      <Tabs defaultValue="novo" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="novo">Novo broadcast</TabsTrigger>
+          <TabsTrigger value="historico">
+            Histórico{broadcasts.length ? ` (${broadcasts.length})` : ""}
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Histórico de campanhas */}
-      {broadcasts.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Histórico de broadcasts</CardTitle>
-            <CardDescription className="text-xs">
-              O envio começa sozinho ao criar e goteja no ritmo escolhido. A
-              barra mostra o progresso ao vivo.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Campanha</TableHead>
-                  <TableHead>Template</TableHead>
-                  <TableHead className="text-right">Alvos</TableHead>
-                  <TableHead className="text-right">Enviados</TableHead>
-                  <TableHead className="text-right">Na fila</TableHead>
-                  <TableHead className="text-right">Erros</TableHead>
-                  <TableHead className="min-w-[160px]">Progresso</TableHead>
-                  <TableHead>Criado</TableHead>
-                  {podeGerenciar && <TableHead className="w-10" />}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {broadcasts.map((b) => {
-                  const naFila = Math.max(
-                    0,
-                    b.total_alvos - b.total_enviados - b.total_erros,
-                  );
-                  return (
-                    <TableRow key={b.id}>
-                      <TableCell className="font-medium">{b.nome}</TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {b.template_name}
-                      </TableCell>
-                      <TableCell className="text-right">{b.total_alvos}</TableCell>
-                      <TableCell className="text-right text-green-600 dark:text-green-400">
-                        {b.total_enviados}
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {naFila}
-                      </TableCell>
-                      <TableCell className="text-right text-destructive">
-                        {b.total_erros}
-                      </TableCell>
-                      <TableCell>
-                        {(() => {
-                          const feitos = b.total_enviados + b.total_erros;
-                          const pct =
-                            b.total_alvos > 0
-                              ? Math.round((feitos / b.total_alvos) * 100)
-                              : 0;
-                          const enviando = b.status === "ativo" && naFila > 0;
-                          return (
-                            <div className="space-y-1">
-                              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                                <div
-                                  className={`h-full rounded-full transition-all ${
-                                    b.status === "concluido"
-                                      ? "bg-green-500"
-                                      : "bg-primary"
-                                  }`}
-                                  style={{ width: `${pct}%` }}
-                                />
-                              </div>
-                              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                                {enviando && (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                )}
-                                <span>
-                                  {pct}%
-                                  {enviando
-                                    ? " · enviando"
-                                    : b.status === "concluido"
-                                      ? " · concluído"
-                                      : b.status === "pausado"
-                                        ? " · pausado"
-                                        : ""}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {new Intl.DateTimeFormat("pt-BR", {
-                          timeZone: "America/Sao_Paulo",
-                          day: "2-digit",
-                          month: "2-digit",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        }).format(new Date(b.created_at))}
-                      </TableCell>
-                      {podeGerenciar && (
-                        <TableCell className="text-right">
-                          {["ativo", "pausado", "rascunho"].includes(b.status) && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  disabled={acaoId === b.id}
-                                >
-                                  {acaoId === b.id ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <MoreVertical className="h-4 w-4" />
-                                  )}
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                {b.status === "pausado" ? (
-                                  <DropdownMenuItem
-                                    onClick={() =>
-                                      mudarStatus(b.id, retomarBroadcast, "Broadcast retomado")
-                                    }
-                                  >
-                                    <Play className="mr-2 h-4 w-4" />
-                                    Retomar
-                                  </DropdownMenuItem>
-                                ) : (
-                                  <DropdownMenuItem
-                                    onClick={() =>
-                                      mudarStatus(b.id, pausarBroadcast, "Broadcast pausado")
-                                    }
-                                  >
-                                    <Pause className="mr-2 h-4 w-4" />
-                                    Pausar
-                                  </DropdownMenuItem>
-                                )}
-                                <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive"
-                                  onClick={() => setCancelando({ id: b.id, nome: b.nome })}
-                                >
-                                  <XCircle className="mr-2 h-4 w-4" />
-                                  Cancelar
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
+        {/* ============ Aba: novo broadcast ============ */}
+        <TabsContent value="novo" className="space-y-6">
+          {/* Como funciona o envio */}
+          <div className="flex items-start gap-2 rounded-md border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-700 dark:text-blue-300">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>
+              Ao criar, o envio <strong>começa sozinho</strong> e goteja no{" "}
+              <strong>ritmo escolhido</strong> (para proteger o número oficial na
+              Meta). Acompanhe pela aba <strong>Histórico</strong>. Requer um
+              template <strong>aprovado pela Meta</strong>.
+            </p>
+          </div>
 
       {/* Sem templates aprovados */}
       {!loadingTemplates && aprovados.length === 0 ? (
@@ -689,27 +551,199 @@ export function Broadcasts() {
                   </div>
                 )}
 
-                {/* Ação final */}
-                <div className="flex items-center justify-end gap-3 border-t pt-3">
-                  {!podeGerenciar && (
-                    <span className="text-xs text-muted-foreground">
-                      Você não tem permissão para criar broadcasts.
-                    </span>
-                  )}
-                  <Button onClick={handleCriar} disabled={!podeCriar}>
-                    {criando ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Send className="mr-2 h-4 w-4" />
-                    )}
-                    Criar broadcast ({selecionados.size})
-                  </Button>
-                </div>
               </CardContent>
             </Card>
           </div>
         </div>
       )}
+
+          {/* Rodapé fixo com o botão de envio (não precisa rolar até o fim) */}
+          {!(!loadingTemplates && aprovados.length === 0) && (
+            <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-end gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+              {!podeGerenciar ? (
+                <span className="mr-auto text-xs text-muted-foreground">
+                  Você não tem permissão para criar broadcasts.
+                </span>
+              ) : (
+                <span className="mr-auto text-xs text-muted-foreground">
+                  {selecionados.size} selecionado(s)
+                  {template ? ` · ${template.name}` : ""}
+                </span>
+              )}
+              <Button size="lg" onClick={handleCriar} disabled={!podeCriar}>
+                {criando ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="mr-2 h-4 w-4" />
+                )}
+                Criar broadcast ({selecionados.size})
+              </Button>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ============ Aba: histórico ============ */}
+        <TabsContent value="historico">
+          {broadcasts.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                Nenhum broadcast criado ainda.
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Histórico de broadcasts</CardTitle>
+                <CardDescription className="text-xs">
+                  O envio começa sozinho ao criar e goteja no ritmo escolhido. A
+                  barra mostra o progresso ao vivo.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Campanha</TableHead>
+                      <TableHead>Template</TableHead>
+                      <TableHead className="text-right">Alvos</TableHead>
+                      <TableHead className="text-right">Enviados</TableHead>
+                      <TableHead className="text-right">Na fila</TableHead>
+                      <TableHead className="text-right">Erros</TableHead>
+                      <TableHead className="min-w-[160px]">Progresso</TableHead>
+                      <TableHead>Criado</TableHead>
+                      {podeGerenciar && <TableHead className="w-10" />}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {broadcasts.map((b) => {
+                      const naFila = Math.max(
+                        0,
+                        b.total_alvos - b.total_enviados - b.total_erros,
+                      );
+                      return (
+                        <TableRow key={b.id}>
+                          <TableCell className="font-medium">{b.nome}</TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground">
+                            {b.template_name}
+                          </TableCell>
+                          <TableCell className="text-right">{b.total_alvos}</TableCell>
+                          <TableCell className="text-right text-green-600 dark:text-green-400">
+                            {b.total_enviados}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {naFila}
+                          </TableCell>
+                          <TableCell className="text-right text-destructive">
+                            {b.total_erros}
+                          </TableCell>
+                          <TableCell>
+                            {(() => {
+                              const feitos = b.total_enviados + b.total_erros;
+                              const pct =
+                                b.total_alvos > 0
+                                  ? Math.round((feitos / b.total_alvos) * 100)
+                                  : 0;
+                              const enviando = b.status === "ativo" && naFila > 0;
+                              return (
+                                <div className="space-y-1">
+                                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                                    <div
+                                      className={`h-full rounded-full transition-all ${
+                                        b.status === "concluido"
+                                          ? "bg-green-500"
+                                          : "bg-primary"
+                                      }`}
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                    {enviando && (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    )}
+                                    <span>
+                                      {pct}%
+                                      {enviando
+                                        ? " · enviando"
+                                        : b.status === "concluido"
+                                          ? " · concluído"
+                                          : b.status === "pausado"
+                                            ? " · pausado"
+                                            : ""}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {new Intl.DateTimeFormat("pt-BR", {
+                              timeZone: "America/Sao_Paulo",
+                              day: "2-digit",
+                              month: "2-digit",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }).format(new Date(b.created_at))}
+                          </TableCell>
+                          {podeGerenciar && (
+                            <TableCell className="text-right">
+                              {["ativo", "pausado", "rascunho"].includes(b.status) && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      disabled={acaoId === b.id}
+                                    >
+                                      {acaoId === b.id ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <MoreVertical className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    {b.status === "pausado" ? (
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          mudarStatus(b.id, retomarBroadcast, "Broadcast retomado")
+                                        }
+                                      >
+                                        <Play className="mr-2 h-4 w-4" />
+                                        Retomar
+                                      </DropdownMenuItem>
+                                    ) : (
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          mudarStatus(b.id, pausarBroadcast, "Broadcast pausado")
+                                        }
+                                      >
+                                        <Pause className="mr-2 h-4 w-4" />
+                                        Pausar
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem
+                                      className="text-destructive focus:text-destructive"
+                                      onClick={() => setCancelando({ id: b.id, nome: b.nome })}
+                                    >
+                                      <XCircle className="mr-2 h-4 w-4" />
+                                      Cancelar
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* Confirmação de cancelamento */}
       <Dialog open={!!cancelando} onOpenChange={(v) => { if (!v) setCancelando(null); }}>
