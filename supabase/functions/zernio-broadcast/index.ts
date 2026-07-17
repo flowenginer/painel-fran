@@ -5,10 +5,11 @@
 // o template aprovado — que é a única forma permitida pela Meta de falar com um
 // lead fora da janela de 24h.
 //
-// Envio (cold-start com template) — documentado no Zernio:
-//   POST https://zernio.com/api/v1/inbox/conversations
-//   body: { accountId, participantId: <telefone>, templateName, templateLanguage,
-//           templateComponents?: [{ type:"body", parameters:[{type:"text", text}] }] }
+// Envio (cold-start com template) — POST /api/v1/inbox/conversations:
+//   - SEM variáveis: { accountId, participantId, templateName, templateLanguage }
+//   - COM variáveis: { accountId, participantId, template: { elements: [
+//       { name, language, components: [{ type:"body", parameters:[{type:"text",text}] }] }
+//     ] } }
 //   -> cria a conversa E dispara o template. Devolve a conversa criada (id).
 //
 // Depois de enviar, grava na fran_memory (type "ai", canal `zernio:<accountId>`)
@@ -208,20 +209,22 @@ async function processarItem(
   });
 
   // Formato do Zernio para iniciar conversa com template:
-  //  - SEM variáveis: campos planos { templateName, templateLanguage } (funciona).
-  //  - COM variáveis: objeto { template: { name, language, components } } no
-  //    padrão Meta — as variáveis vão em components[].parameters. (O campo plano
-  //    `templateComponents` NÃO é lido pelo Zernio, por isso dava
-  //    "Template parameter count mismatch".)
+  //  - SEM variáveis: campos planos { templateName, templateLanguage }.
+  //  - COM variáveis: { template: { elements: [{ name, language, components }] } }
+  //    (padrão Meta) — as variáveis vão em components[].parameters.
   const zernioBody: Record<string, unknown> = {
     accountId,
     participantId: telefone,
   };
   if (componentes.length > 0) {
     zernioBody.template = {
-      name: b.template_name,
-      language: b.template_language,
-      components: componentes,
+      elements: [
+        {
+          name: b.template_name,
+          language: b.template_language,
+          components: componentes,
+        },
+      ],
     };
   } else {
     zernioBody.templateName = b.template_name;
