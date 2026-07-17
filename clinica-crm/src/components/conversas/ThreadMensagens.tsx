@@ -74,15 +74,14 @@ export function ThreadMensagens({ conversa }: ThreadMensagensProps) {
               {etapa.label}
             </Badge>
           )}
-          {oficial &&
-            (janelaFechada ? (
-              <Badge variant="secondary">Janela fechada</Badge>
-            ) : (
-              restante && (
-                <Badge variant="outline" className="border-amber-500/40 text-amber-600">
-                  Janela: {restante}
-                </Badge>
-              ))}
+          {oficial && janelaFechada && (
+            <Badge variant="secondary">Janela fechada</Badge>
+          )}
+          {oficial && !janelaFechada && restante && (
+            <Badge variant="outline" className="border-amber-500/40 text-amber-600">
+              Janela: {restante}
+            </Badge>
+          )}
         </div>
       </div>
 
