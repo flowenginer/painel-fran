@@ -67,3 +67,73 @@ export interface Paciente {
   created_at: string;
   updated_at: string;
 }
+
+// ---------------------------------------------------------------------------
+// Inbox (fase 3): canais, conversas, mensagens
+// ---------------------------------------------------------------------------
+
+// Provedor do canal de WhatsApp.
+//  - uazapi: não-oficial (via n8n) — atendimento
+//  - zernio: oficial (Meta Cloud API) — captação + atribuição de anúncio
+export type CanalTipo = "uazapi" | "zernio";
+
+export interface Canal {
+  id: number;
+  unidade_id: number;
+  nome: string;
+  tipo: CanalTipo;
+  instancia: string;
+  numero: string | null;
+  zernio_account_id: string | null;
+  ativo: boolean;
+  conectado: boolean;
+  status_em: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type StatusConversa = "aberta" | "resolvida";
+export type DirecaoMensagem = "in" | "out";
+export type TipoMensagem =
+  | "texto"
+  | "imagem"
+  | "audio"
+  | "video"
+  | "documento";
+
+export interface Conversa {
+  id: number;
+  unidade_id: number;
+  paciente_id: number | null;
+  canal_id: number | null;
+  telefone: string;
+  responsavel_id: string | null;
+  status: StatusConversa;
+  ultima_mensagem_at: string | null;
+  ultima_mensagem_preview: string | null;
+  ultima_direcao: DirecaoMensagem | null;
+  nao_lida: boolean;
+  janela_expira_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Conversa + dados do paciente/canal para exibição na lista.
+export interface ConversaComPaciente extends Conversa {
+  paciente: Pick<Paciente, "id" | "nome" | "status_funil"> | null;
+  canal: Pick<Canal, "id" | "nome" | "tipo"> | null;
+}
+
+export interface Mensagem {
+  id: number;
+  conversa_id: number;
+  unidade_id: number;
+  direcao: DirecaoMensagem;
+  tipo: TipoMensagem;
+  conteudo: string | null;
+  media_url: string | null;
+  media_mime: string | null;
+  enviado_por: string | null;
+  provider_msg_id: string | null;
+  created_at: string;
+}
