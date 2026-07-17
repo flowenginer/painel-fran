@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { PermissionRoute, RedirecionarInicio } from "@/components/PermissionRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { Toaster } from "@/components/ui/toaster";
 import { Login } from "@/pages/Login";
 import { Dashboard } from "@/pages/Dashboard";
 import { Pacientes } from "@/pages/Pacientes";
@@ -13,7 +14,9 @@ import { Usuarios } from "@/pages/Usuarios";
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      <Toaster />
+      <Routes>
       <Route path="/login" element={<Login />} />
 
       <Route
@@ -75,6 +78,7 @@ export default function App() {
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      </Routes>
+    </>
   );
 }
