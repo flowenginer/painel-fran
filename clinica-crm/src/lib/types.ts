@@ -179,3 +179,19 @@ export interface AgendamentoComRelacoes extends Agendamento {
   paciente: Pick<Paciente, "id" | "nome" | "telefone"> | null;
   categoria: Pick<AgendaCategoria, "id" | "nome" | "google_color_id"> | null;
 }
+
+// ---------------------------------------------------------------------------
+// Lembretes automáticos (fase 7)
+// ---------------------------------------------------------------------------
+
+export interface LembreteConfig {
+  id: number;
+  unidade_id: number;
+  nome: string;
+  meses: number;
+  canal_id: number | null;
+  mensagem: string;
+  ativo: boolean;
+  created_at: string;
+  updated_at: string;
+}

@@ -32,6 +32,7 @@ import {
 import { listarCanais, removerCanal } from "@/lib/canais";
 import { formatTelefone } from "@/lib/formatters";
 import { CanalDialog } from "@/components/config/CanalDialog";
+import { LembretesCard } from "@/components/config/LembretesCard";
 import type { Canal } from "@/lib/types";
 
 export function Configuracoes() {
@@ -185,6 +186,8 @@ export function Configuracoes() {
           </div>
         </CardContent>
       </Card>
+
+      <LembretesCard />
 
       <CanalDialog
         open={formOpen}
