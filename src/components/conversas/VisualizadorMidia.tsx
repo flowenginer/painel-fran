@@ -1,4 +1,4 @@
-import { ExternalLink } from "lucide-react";
+import { Download, ExternalLink } from "lucide-react";
 
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 
@@ -14,16 +14,44 @@ interface Props {
   onClose: () => void;
 }
 
+// URL do proxy de mídia (Edge Function). Busca o arquivo no servidor e devolve
+// inline, com content-type certo e SEM X-Frame-Options — assim o navegador
+// renderiza PDF nativamente e o UAZAPI para de recusar o iframe.
+function urlProxy(m: MidiaAberta): string {
+  const base = import.meta.env.VITE_SUPABASE_URL;
+  const qs = new URLSearchParams({ url: m.url });
+  if (m.nome) qs.set("nome", m.nome);
+  return `${base}/functions/v1/midia-proxy?${qs.toString()}`;
+}
+
+function ehPdf(m: MidiaAberta): boolean {
+  return (
+    (m.mime ?? "").toLowerCase().includes("pdf") ||
+    /\.pdf(\?|#|$)/i.test(m.url)
+  );
+}
+
+function ehOffice(m: MidiaAberta): boolean {
+  const mime = (m.mime ?? "").toLowerCase();
+  if (
+    mime.includes("word") ||
+    mime.includes("excel") ||
+    mime.includes("spreadsheet") ||
+    mime.includes("presentation") ||
+    mime.includes("powerpoint")
+  ) {
+    return true;
+  }
+  return /\.(docx?|xlsx?|pptx?)(\?|#|$)/i.test(m.url);
+}
+
 export function VisualizadorMidia({ midia, onClose }: Props) {
+  const proxied = midia ? urlProxy(midia) : "";
   const ehImagem = midia?.tipo === "imagem";
-  const ehDocumento = midia?.tipo === "documento";
-  // O servidor da UAZAPI recusa ser embutido em iframe (X-Frame-Options).
-  // Usamos o visualizador do Google como proxy — funciona com qualquer URL
-  // pública (pdf, doc, docx, xls...) e renderiza dentro do sistema.
-  const visualizadorDoc = midia
-    ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(
-        midia.url
-      )}`
+  const pdf = midia ? ehPdf(midia) : false;
+  const office = midia ? ehOffice(midia) : false;
+  const officeSrc = midia
+    ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(proxied)}`
     : "";
 
   return (
@@ -37,21 +65,38 @@ export function VisualizadorMidia({ midia, onClose }: Props) {
                 alt={midia.nome || "imagem"}
                 className="mx-auto max-h-[78vh] w-full rounded-md object-contain"
               />
-            ) : ehDocumento ? (
+            ) : pdf ? (
               <iframe
-                src={visualizadorDoc}
+                src={proxied}
+                title={midia.nome || "documento"}
+                className="h-[78vh] w-full rounded-md border bg-white"
+              />
+            ) : office ? (
+              <iframe
+                src={officeSrc}
                 title={midia.nome || "documento"}
                 className="h-[78vh] w-full rounded-md border bg-white"
               />
             ) : (
               <div className="flex flex-col items-center gap-3 py-10 text-center text-sm text-muted-foreground">
-                <p>Este tipo de arquivo não pode ser pré-visualizado aqui.</p>
+                <p>
+                  Este tipo de arquivo não tem pré-visualização. Use os botões
+                  abaixo para abrir ou baixar.
+                </p>
               </div>
             )}
 
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-4">
               <a
-                href={midia.url}
+                href={proxied}
+                download={midia.nome || undefined}
+                className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:underline"
+              >
+                <Download className="h-4 w-4" />
+                Baixar
+              </a>
+              <a
+                href={proxied}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
