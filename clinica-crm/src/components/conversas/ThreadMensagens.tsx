@@ -112,7 +112,7 @@ export function ThreadMensagens({ conversa }: ThreadMensagensProps) {
         <div ref={fimRef} />
       </div>
 
-      <Composer janelaFechada={janelaFechada} />
+      <Composer conversaId={conversa.id} janelaFechada={janelaFechada} />
     </div>
   );
 }
