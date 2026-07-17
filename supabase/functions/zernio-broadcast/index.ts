@@ -297,6 +297,51 @@ async function processarItem(
     erro_detalhes: null,
   }, { Prefer: "return=minimal" });
 
+  // Tira o lead de "pendente" — igual ao disparo NÃO-oficial (processar-fila):
+  // pendente → primeira_msg + distribui responsável. Preserva status manuais
+  // (acordo_aceito/em_negociacao) usando um filtro que só casa 'pendente'.
+  if (item.devedor_id) {
+    const agora = new Date().toISOString();
+    let moveu = false;
+    try {
+      const movResp = await rest(
+        env,
+        "PATCH",
+        `/fran_devedores?id=eq.${item.devedor_id}&status_negociacao=eq.pendente`,
+        {
+          status_negociacao: "primeira_msg",
+          data_primeiro_disparo: agora,
+          data_ultimo_contato: agora,
+        },
+        { Prefer: "return=representation" },
+      );
+      if (movResp.ok) {
+        const rows = (await movResp.json().catch(() => [])) as unknown[];
+        moveu = Array.isArray(rows) && rows.length > 0;
+      }
+    } catch (e) {
+      console.error(`[zernio-broadcast] status devedor ${item.devedor_id}:`, e);
+    }
+
+    if (moveu) {
+      // Lead recém-ativado: distribui entre operadores (round-robin).
+      try {
+        await rpc(env, "fran_atribuir_responsavel", { p_devedor_id: item.devedor_id });
+      } catch (e) {
+        console.error(`[zernio-broadcast] atribuir devedor ${item.devedor_id}:`, e);
+      }
+    } else {
+      // Já não estava pendente: só marca novo contato, sem mexer no status/dono.
+      await rest(
+        env,
+        "PATCH",
+        `/fran_devedores?id=eq.${item.devedor_id}`,
+        { data_ultimo_contato: agora },
+        { Prefer: "return=minimal" },
+      ).catch(() => {});
+    }
+  }
+
   return "enviado";
 }
 
