@@ -140,6 +140,16 @@ export async function removerPaciente(id: number): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+export async function buscarPaciente(id: number): Promise<Paciente | null> {
+  const { data, error } = await supabase
+    .from("pacientes")
+    .select(SELECT_PACIENTE)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as unknown as Paciente | null) ?? null;
+}
+
 export async function listarUnidades(): Promise<Unidade[]> {
   const { data, error } = await supabase
     .from("unidades")

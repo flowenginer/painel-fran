@@ -137,3 +137,45 @@ export interface Mensagem {
   provider_msg_id: string | null;
   created_at: string;
 }
+
+// ---------------------------------------------------------------------------
+// Agenda (fase 5)
+// ---------------------------------------------------------------------------
+
+export interface AgendaCategoria {
+  id: number;
+  unidade_id: number;
+  nome: string;
+  google_color_id: number;
+  ativo: boolean;
+  created_at: string;
+}
+
+export type StatusAgendamento =
+  | "agendado"
+  | "confirmado"
+  | "compareceu"
+  | "faltou"
+  | "cancelado";
+
+export interface Agendamento {
+  id: number;
+  unidade_id: number;
+  paciente_id: number | null;
+  categoria_id: number | null;
+  titulo: string;
+  descricao: string | null;
+  inicio: string;
+  fim: string;
+  status: StatusAgendamento;
+  responsavel_id: string | null;
+  criado_por: string | null;
+  google_event_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgendamentoComRelacoes extends Agendamento {
+  paciente: Pick<Paciente, "id" | "nome" | "telefone"> | null;
+  categoria: Pick<AgendaCategoria, "id" | "nome" | "google_color_id"> | null;
+}

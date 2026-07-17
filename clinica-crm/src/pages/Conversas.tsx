@@ -8,6 +8,7 @@ import { useConversasRealtime } from "@/hooks/useConversasRealtime";
 import { listarConversas, marcarConversaLida } from "@/lib/conversas";
 import { ListaConversas } from "@/components/conversas/ListaConversas";
 import { ThreadMensagens } from "@/components/conversas/ThreadMensagens";
+import { LeadPanel } from "@/components/conversas/LeadPanel";
 
 type FiltroCanal = "todos" | "zernio" | "uazapi";
 
@@ -43,7 +44,7 @@ export function Conversas() {
   }, [ativa]);
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 md:grid-cols-[340px_1fr]">
+    <div className="grid h-full min-h-0 grid-cols-1 md:grid-cols-[320px_1fr] lg:grid-cols-[320px_1fr_320px]">
       {/* Coluna esquerda: lista */}
       <aside
         className={cn(
@@ -108,6 +109,11 @@ export function Conversas() {
         )}
         <ThreadMensagens conversa={ativa} />
       </main>
+
+      {/* Coluna direita: dados do lead (só em telas grandes) */}
+      <aside className="hidden min-h-0 border-l lg:block">
+        <LeadPanel conversa={ativa} />
+      </aside>
     </div>
   );
 }
