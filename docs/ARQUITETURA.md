@@ -273,9 +273,35 @@ Todas em `supabase/functions/<nome>/index.ts`. Contratos detalhados em
   componente em **minúsculo** (`body`, `header`...), sem `profileId` no create.
 - **Broadcast/cold-start (`zernio-broadcast`):** para número **frio** (sem conversa),
   `POST https://zernio.com/api/v1/inbox/conversations` com
-  `{ accountId, participantId:<telefone>, templateName, templateLanguage, templateComponents? }`
+  `{ accountId, participantId:<telefone>, templateName, templateLanguage, templateParams?:string[] }`
   — cria a conversa **e** dispara o template. Ritmo por campanha (`por_hora`) + teto
   diário global; retenta até 3×; reconcilia contadores/estado.
+
+### 4.2 Zernio — formatos que funcionam (lições aprendidas)
+
+A Zernio é um **whitelabel da Late API** (`docs.getlate.dev`; o webhook assina com
+`x-late-signature`). O **OpenAPI oficial** é a fonte da verdade dos formatos. Pontos
+que custaram a acertar e **não** devem ser redescobertos:
+
+- **Enviar template com variáveis (cold-start):** as variáveis vão no campo
+  **`templateParams`** — um **array plano de strings** com os valores **na ordem**
+  (variáveis do header → do body → um valor por botão de URL dinâmico). Ex.: body com
+  `{{1}} {{2}}` → `templateParams: ["Michel", "CCBEU..."]`.
+  - ❌ **NÃO** é `templateComponents` (estrutura Meta `[{type:"body",parameters:[...]}]`)
+    → dá `Template parameter count mismatch` (o Zernio conta o array aninhado como 1).
+  - ❌ **NÃO** é um objeto `template:{...}` nem `template:{elements:[...]}`
+    → dá `Message, attachment, or template is required`.
+- **Sem variáveis:** basta `templateName` + `templateLanguage` (sem `templateParams`).
+- **IDs:** `zernio_account_id` é o **accountId interno do Zernio** (ex.: `6a50598c...`),
+  **não** o WABA da Meta. Usar o WABA dá "conversa não encontrada".
+- **Criar template (`/v1/whatsapp/templates`):** tipos de componente em **minúsculo**
+  (`body`, `header`...), **sem** `profileId`, e — quando há variável — **com** o
+  `example.body_text` (senão a Meta recusa com "Invalid input").
+- **Janela de 24h:** dentro de 24h da última msg do lead → texto livre pelo
+  `/messages`. Fora → só template (é o próprio cold-start que reabre o contato).
+- **Diagnóstico:** o `erro_detalhes` do item de broadcast guarda a resposta crua do
+  Zernio; os **logs da Edge Function** e o **API log do Zernio** (painel) mostram o
+  request/response exatos — foi assim que fechamos o formato.
 
 ---
 
