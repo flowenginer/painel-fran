@@ -40,7 +40,7 @@ export async function listarPacientes(
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return (data ?? []) as Paciente[];
+  return (data ?? []) as unknown as Paciente[];
 }
 
 export interface CriarPacienteInput {
@@ -86,7 +86,7 @@ export async function criarPaciente(
     }
     throw new Error(error.message);
   }
-  return data as Paciente;
+  return data as unknown as Paciente;
 }
 
 export interface AtualizarPacienteInput {
@@ -132,7 +132,7 @@ export async function atualizarPaciente(
     }
     throw new Error(error.message);
   }
-  return data as Paciente;
+  return data as unknown as Paciente;
 }
 
 export async function removerPaciente(id: number): Promise<void> {
@@ -146,5 +146,5 @@ export async function listarUnidades(): Promise<Unidade[]> {
     .select("id,nome,ativo,created_at")
     .order("nome", { ascending: true });
   if (error) throw new Error(error.message);
-  return (data ?? []) as Unidade[];
+  return (data ?? []) as unknown as Unidade[];
 }

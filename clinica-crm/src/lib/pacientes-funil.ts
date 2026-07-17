@@ -69,8 +69,9 @@ export const ETAPAS_FUNIL: EtapaFunil[] = [
 const POR_ID = new Map(ETAPAS_FUNIL.map((e) => [e.id, e]));
 
 export function etapaFunil(id: StatusFunil | string | null | undefined): EtapaFunil {
+  const encontrada = id ? POR_ID.get(id as StatusFunil) : undefined;
   return (
-    (id && POR_ID.get(id as StatusFunil)) ?? {
+    encontrada ?? {
       id: "lead_novo",
       label: String(id ?? "—"),
       ordem: 99,
