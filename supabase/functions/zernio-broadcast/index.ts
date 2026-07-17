@@ -209,18 +209,14 @@ async function processarItem(
   });
 
   // Formato do Zernio para iniciar conversa com template:
-  //  - SEM variáveis: campos planos { templateName, templateLanguage } (funciona).
-  //  - COM variáveis: objeto { template: { name, language, components } } no
-  //    padrão Meta — as variáveis vão em components[].parameters. (O campo plano
-  //    `templateComponents` NÃO é lido pelo Zernio, por isso dava
-  //    "Template parameter count mismatch".)
+  //  - SEM variáveis: campos planos { templateName, templateLanguage }.
+  //  - COM variáveis: { template: { elements: [{ name, language, components }] } }
+  //    (padrão Meta) — as variáveis vão em components[].parameters.
   const zernioBody: Record<string, unknown> = {
     accountId,
     participantId: telefone,
   };
   if (componentes.length > 0) {
-    // Formato do Zernio para template com variáveis: campo `template` com
-    // `elements` (padrão Meta), variáveis em components[].parameters.
     zernioBody.template = {
       elements: [
         {
