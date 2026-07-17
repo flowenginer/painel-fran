@@ -5,11 +5,11 @@
 // o template aprovado — que é a única forma permitida pela Meta de falar com um
 // lead fora da janela de 24h.
 //
-// Envio (cold-start com template) — POST /api/v1/inbox/conversations:
-//   - SEM variáveis: { accountId, participantId, templateName, templateLanguage }
-//   - COM variáveis: { accountId, participantId, template: { elements: [
-//       { name, language, components: [{ type:"body", parameters:[{type:"text",text}] }] }
-//     ] } }
+// Envio (cold-start) — POST /api/v1/inbox/conversations (OpenAPI oficial):
+//   { accountId, participantId, templateName, templateLanguage,
+//     templateParams?: string[] }
+//   templateParams = valores das variáveis num array plano, na ordem
+//   (header → body → botões de URL). Sem variáveis, só templateName/Language.
 //   -> cria a conversa E dispara o template. Devolve a conversa criada (id).
 //
 // Depois de enviar, grava na fran_memory (type "ai", canal `zernio:<accountId>`)
@@ -122,22 +122,24 @@ function valorCampo(campoId: string, d: Devedor): string {
   }
 }
 
-// Constrói os parâmetros do componente "body" na ordem 1,2,3... a partir do
-// mapa de variáveis do broadcast ({"1":"primeiro_nome", ...}) e do devedor.
-function montarTemplateComponents(
+// Monta o `templateParams` do Zernio: um ARRAY PLANO com os VALORES das
+// variáveis na ordem (1,2,3...), a partir do mapa do broadcast
+// ({"1":"primeiro_nome", ...}) e do devedor. É o formato exigido pela API
+// (OpenAPI: templateParams = array de strings, "one flat array, in the order
+// the variables appear"). `valores` (por índice) é só para exibir na thread.
+function montarTemplateParams(
   variaveis: Record<string, string> | null | undefined,
   d: Devedor,
-): { componentes: Array<Record<string, unknown>>; valores: Record<string, string> } {
+): { params: string[]; valores: Record<string, string> } {
   const mapa = variaveis ?? {};
   const indices = Object.keys(mapa).map((k) => Number(k)).filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
   const valores: Record<string, string> = {};
-  const parameters = indices.map((i) => {
+  const params = indices.map((i) => {
     const valor = valorCampo(mapa[String(i)], d);
     valores[String(i)] = valor;
-    return { type: "text", text: valor };
+    return valor;
   });
-  if (parameters.length === 0) return { componentes: [], valores };
-  return { componentes: [{ type: "body", parameters }], valores };
+  return { params, valores };
 }
 
 // ---- Envio de UM item --------------------------------------------------------
@@ -203,33 +205,21 @@ async function processarItem(
     return "erro";
   }
 
-  const { componentes, valores } = montarTemplateComponents(b.variaveis, d ?? {
+  const { params, valores } = montarTemplateParams(b.variaveis, d ?? {
     nome_devedor: null, primeiro_nome: null, tratamento: null, instituicao: null,
     cidade: null, valor_atualizado: null, valor_original: null,
   });
 
-  // Formato do Zernio para iniciar conversa com template:
-  //  - SEM variáveis: campos planos { templateName, templateLanguage }.
-  //  - COM variáveis: { template: { elements: [{ name, language, components }] } }
-  //    (padrão Meta) — as variáveis vão em components[].parameters.
+  // Formato do Zernio (OpenAPI POST /v1/inbox/conversations):
+  //   { accountId, participantId, templateName, templateLanguage,
+  //     templateParams?: string[] }  // valores das variáveis em ordem
   const zernioBody: Record<string, unknown> = {
     accountId,
     participantId: telefone,
+    templateName: b.template_name,
+    templateLanguage: b.template_language,
   };
-  if (componentes.length > 0) {
-    zernioBody.template = {
-      elements: [
-        {
-          name: b.template_name,
-          language: b.template_language,
-          components: componentes,
-        },
-      ],
-    };
-  } else {
-    zernioBody.templateName = b.template_name;
-    zernioBody.templateLanguage = b.template_language;
-  }
+  if (params.length > 0) zernioBody.templateParams = params;
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 30_000);
