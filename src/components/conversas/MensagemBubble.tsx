@@ -1,4 +1,5 @@
 import { Image as ImageIcon, Mic, Video, FileText, Check } from "lucide-react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
@@ -43,17 +44,39 @@ function renderConteudo(content: string): ReactNode {
   });
 }
 
-// Tipo de mídia: usa media_tipo se vier; senão deduz pelo mime.
+// Tipo de mídia: usa media_tipo se vier (o Zernio manda em inglês —
+// "image"/"photo", "document"/"file" —, não bate 1:1 com nosso vocabulário);
+// senão deduz pelo mime.
 function tipoMidia(m: MensagemParsed): "audio" | "imagem" | "documento" | "video" {
   const t = (m.media_tipo || "").toLowerCase();
-  if (t === "audio" || t === "imagem" || t === "documento" || t === "video") {
-    return t;
-  }
+  if (t === "audio" || t === "voice") return "audio";
+  if (t === "imagem" || t === "image" || t === "photo") return "imagem";
+  if (t === "documento" || t === "document" || t === "file") return "documento";
+  if (t === "video") return "video";
   const mime = (m.media_mime || "").toLowerCase();
   if (mime.startsWith("audio")) return "audio";
   if (mime.startsWith("image")) return "imagem";
   if (mime.startsWith("video")) return "video";
   return "documento";
+}
+
+const EXT_IMAGEM = /\.(jpe?g|png|gif|webp|bmp|heic|heif|tiff?)(\?|#|$)/i;
+const EXT_NAO_IMAGEM = /\.(pdf|docx?|xlsx?|pptx?|zip|rar|7z|txt|csv|rtf|odt|ods|odp)(\?|#|$)/i;
+
+/**
+ * O Zernio às vezes marca uma foto enviada sem compressão (como arquivo) com
+ * tipo "documento" e sem mime — nesse caso a única forma confiável de saber
+ * se é imagem é tentar carregar a miniatura e ver se falha. Só pulamos essa
+ * tentativa quando já há um sinal claro (mime ou extensão) de que NÃO é
+ * imagem, pra não desperdiçar banda tentando renderizar um PDF grande.
+ */
+function definitivamenteNaoImagem(m: MensagemParsed): boolean {
+  const mime = (m.media_mime || "").toLowerCase();
+  if (mime) return !mime.startsWith("image/");
+  const nome = (m.media_nome || "").toLowerCase();
+  if (EXT_IMAGEM.test(nome)) return false;
+  if (EXT_NAO_IMAGEM.test(nome)) return true;
+  return false;
 }
 
 function RenderMidia({
@@ -68,16 +91,27 @@ function RenderMidia({
   // Mídia recebida (Zernio/UAZAPI) pode exigir auth que o navegador não manda
   // em src de <img>/<audio>/<video> — sempre passa pelo midia-proxy.
   const proxied = urlMidiaProxy(url, m.media_nome);
+  const [imagemFalhou, setImagemFalhou] = useState(false);
 
   if (tipo === "audio") {
     return <audio controls preload="metadata" src={proxied} className="w-60 max-w-full" />;
   }
-  if (tipo === "imagem") {
+  if (tipo === "video") {
+    return (
+      <video controls src={proxied} className="max-h-64 max-w-full rounded-md" />
+    );
+  }
+
+  // "imagem" e "documento" ambíguo (ver definitivamenteNaoImagem) mostram a
+  // miniatura como se fosse foto, igual o WhatsApp — só cai pro botão de
+  // arquivo se já soubermos que não é imagem ou se a miniatura falhar.
+  const tentaImagem = tipo === "imagem" || !definitivamenteNaoImagem(m);
+  if (tentaImagem && !imagemFalhou) {
     return (
       <button
         type="button"
         onClick={() =>
-          onAbrirMidia?.({ url, tipo, nome: m.media_nome, mime: m.media_mime })
+          onAbrirMidia?.({ url, tipo: "imagem", nome: m.media_nome, mime: m.media_mime })
         }
         className="block"
         title="Ampliar"
@@ -86,20 +120,17 @@ function RenderMidia({
           src={proxied}
           alt="imagem"
           className="max-h-64 max-w-full cursor-pointer rounded-md object-contain"
+          onError={() => setImagemFalhou(true)}
         />
       </button>
     );
   }
-  if (tipo === "video") {
-    return (
-      <video controls src={proxied} className="max-h-64 max-w-full rounded-md" />
-    );
-  }
+
   return (
     <button
       type="button"
       onClick={() =>
-        onAbrirMidia?.({ url, tipo, nome: m.media_nome, mime: m.media_mime })
+        onAbrirMidia?.({ url, tipo: "documento", nome: m.media_nome, mime: m.media_mime })
       }
       className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-accent/40"
     >
