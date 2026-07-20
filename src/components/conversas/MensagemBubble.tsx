@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 import { detectarMidia, type MensagemParsed } from "@/lib/conversas";
+import { urlMidiaProxy } from "@/lib/midia-proxy";
 import type { MidiaAberta } from "./VisualizadorMidia";
 
 interface Props {
@@ -64,9 +65,12 @@ function RenderMidia({
 }) {
   const url = m.media_url as string;
   const tipo = tipoMidia(m);
+  // Mídia recebida (Zernio/UAZAPI) pode exigir auth que o navegador não manda
+  // em src de <img>/<audio>/<video> — sempre passa pelo midia-proxy.
+  const proxied = urlMidiaProxy(url, m.media_nome);
 
   if (tipo === "audio") {
-    return <audio controls preload="metadata" src={url} className="w-60 max-w-full" />;
+    return <audio controls preload="metadata" src={proxied} className="w-60 max-w-full" />;
   }
   if (tipo === "imagem") {
     return (
@@ -79,7 +83,7 @@ function RenderMidia({
         title="Ampliar"
       >
         <img
-          src={url}
+          src={proxied}
           alt="imagem"
           className="max-h-64 max-w-full cursor-pointer rounded-md object-contain"
         />
@@ -88,7 +92,7 @@ function RenderMidia({
   }
   if (tipo === "video") {
     return (
-      <video controls src={url} className="max-h-64 max-w-full rounded-md" />
+      <video controls src={proxied} className="max-h-64 max-w-full rounded-md" />
     );
   }
   return (

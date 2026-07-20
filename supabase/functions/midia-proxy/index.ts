@@ -9,6 +9,12 @@
 // É público (iframes/novas abas não enviam Authorization), com proteção
 // anti-SSRF: só http/https e bloqueia hosts privados/loopback/metadados.
 // Autossuficiente (deploy pelo Dashboard).
+//
+// Zernio: a API de mídia (`zernio.com/api/v1/whatsapp/media/...`) exige
+// `Authorization: Bearer <zernio_api_key>` — sem isso o upstream responde 401.
+// Como o navegador não envia esse header em <img>/<audio>/<video> src, o
+// proxy busca `zernio_api_key` em `fran_config` (service role) e injeta o
+// Bearer sempre que o host de destino for zernio.com.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -33,6 +39,32 @@ function hostPerigoso(hostname: string): boolean {
   }
   if (h === "::1" || h.startsWith("fd") || h.startsWith("fe80")) return true; // IPv6 privado
   return false;
+}
+
+// Busca a zernio_api_key em fran_config (com fallback pro Secret da função).
+async function lerZernioApiKey(): Promise<string> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (supabaseUrl && serviceKey) {
+    try {
+      const resp = await fetch(
+        `${supabaseUrl}/rest/v1/fran_config?chave=eq.zernio_api_key&select=valor`,
+        { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } },
+      );
+      if (resp.ok) {
+        const rows = (await resp.json().catch(() => [])) as Array<{ valor: string | null }>;
+        if (rows[0]?.valor) return rows[0].valor;
+      }
+    } catch {
+      // ignora — cai no fallback abaixo
+    }
+  }
+  return Deno.env.get("ZERNIO_API_KEY") || "";
+}
+
+function ehHostZernio(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return h === "zernio.com" || h.endsWith(".zernio.com");
 }
 
 Deno.serve(async (req: Request) => {
@@ -62,8 +94,14 @@ Deno.serve(async (req: Request) => {
 
     // Repassa o Range (útil para <audio>/<video> com seek).
     const range = req.headers.get("range");
+    const upstreamHeaders: Record<string, string> = {};
+    if (range) upstreamHeaders.Range = range;
+    if (ehHostZernio(u.hostname)) {
+      const zernioApiKey = await lerZernioApiKey();
+      if (zernioApiKey) upstreamHeaders.Authorization = `Bearer ${zernioApiKey}`;
+    }
     const upstream = await fetch(u.toString(), {
-      headers: range ? { Range: range } : {},
+      headers: upstreamHeaders,
       redirect: "follow",
     });
 

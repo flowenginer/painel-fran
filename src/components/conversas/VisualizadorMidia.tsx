@@ -1,6 +1,7 @@
 import { Download, ExternalLink } from "lucide-react";
 
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { urlMidiaProxy } from "@/lib/midia-proxy";
 
 export interface MidiaAberta {
   url: string;
@@ -12,16 +13,6 @@ export interface MidiaAberta {
 interface Props {
   midia: MidiaAberta | null;
   onClose: () => void;
-}
-
-// URL do proxy de mídia (Edge Function). Busca o arquivo no servidor e devolve
-// inline, com content-type certo e SEM X-Frame-Options — assim o navegador
-// renderiza PDF nativamente e o UAZAPI para de recusar o iframe.
-function urlProxy(m: MidiaAberta): string {
-  const base = import.meta.env.VITE_SUPABASE_URL;
-  const qs = new URLSearchParams({ url: m.url });
-  if (m.nome) qs.set("nome", m.nome);
-  return `${base}/functions/v1/midia-proxy?${qs.toString()}`;
 }
 
 function ehPdf(m: MidiaAberta): boolean {
@@ -46,7 +37,7 @@ function ehOffice(m: MidiaAberta): boolean {
 }
 
 export function VisualizadorMidia({ midia, onClose }: Props) {
-  const proxied = midia ? urlProxy(midia) : "";
+  const proxied = midia ? urlMidiaProxy(midia.url, midia.nome) : "";
   const ehImagem = midia?.tipo === "imagem";
   const pdf = midia ? ehPdf(midia) : false;
   const office = midia ? ehOffice(midia) : false;
@@ -61,7 +52,7 @@ export function VisualizadorMidia({ midia, onClose }: Props) {
           <div className="space-y-3">
             {ehImagem ? (
               <img
-                src={midia.url}
+                src={proxied}
                 alt={midia.nome || "imagem"}
                 className="mx-auto max-h-[78vh] w-full rounded-md object-contain"
               />
